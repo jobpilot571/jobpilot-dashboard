@@ -1,0 +1,48 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
+
+  --color-background: hsl(220 30% 98%);
+  --color-foreground: hsl(222 47% 11%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(222 47% 11%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(222 47% 11%);
+  --color-primary: hsl(224 76% 48%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(220 20% 94%);
+  --color-secondary-foreground: hsl(222 47% 18%);
+  --color-muted: hsl(220 20% 95%);
+  --color-muted-foreground: hsl(220 12% 46%);
+  --color-accent: hsl(188 90% 42%);
+  --color-accent-foreground: hsl(0 0% 100%);
+  --color-destructive: hsl(0 78% 56%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-border: hsl(220 20% 90%);
+  --color-input: hsl(220 20% 90%);
+  --color-ring: hsl(224 76% 48%);
+  --color-sidebar: hsl(224 71% 8%);
+  --color-sidebar-foreground: hsl(220 15% 82%);
+  --color-sidebar-primary: hsl(217 91% 60%);
+  --color-sidebar-primary-foreground: hsl(0 0% 100%);
+  --color-sidebar-accent: hsl(224 60% 14%);
+  --color-sidebar-accent-foreground: hsl(220 15% 95%);
+  --color-sidebar-border: hsl(224 50% 16%);
+  --color-sidebar-ring: hsl(217 91% 60%);
+  --radius-lg: 0.875rem;
+  --radius-md: 0.75rem;
+  --radius-sm: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply min-h-screen bg-background font-sans text-foreground antialiased;
+  }
+}

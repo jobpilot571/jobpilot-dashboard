@@ -1,0 +1,382 @@
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  CalendarDays,
+  ChevronDown,
+  ExternalLink,
+  FileText,
+  Forward,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  FORWARD_STAGES,
+  STAGE_STATUS_OPTIONS,
+  buildForwardNotes,
+  companyLogoUrl,
+  nextForwardRounds,
+  parseAppIdFromForwardNote,
+  parseJdFromNotes,
+  type ForwardStageKey,
+} from "@/features/placement/constants";
+import { useJobApplications } from "@/hooks/useJobApplications";
+import {
+  useDeletePipelineEvent,
+  useStudentPipelineEvents,
+  useUpsertPipelineEvent,
+  type PipelineEvent,
+} from "@/hooks/usePlacement";
+import { formatDateCST, formatTimeCST } from "@/lib/timezone";
+import { cn } from "@/lib/utils";
+
+const STAGE_TONE: Record<ForwardStageKey, string> = {
+  assessment: "border-sky-200 bg-sky-50 text-sky-800",
+  screening: "border-indigo-200 bg-indigo-50 text-indigo-900",
+  technical: "border-amber-200 bg-amber-50 text-amber-900",
+  panel: "border-emerald-200 bg-emerald-50 text-emerald-800",
+};
+
+export function StudentForwardedTab({
+  studentId,
+  employeeId,
+}: {
+  studentId: string;
+  employeeId?: string | null;
+}) {
+  const { data: events = [], isLoading } = useStudentPipelineEvents(studentId);
+  const { data: apps = [] } = useJobApplications(studentId);
+  const remove = useDeletePipelineEvent();
+  const upsert = useUpsertPipelineEvent();
+  const [filter, setFilter] = useState<"all" | ForwardStageKey>("all");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const appsById = useMemo(() => Object.fromEntries(apps.map((a) => [a.id, a])), [apps]);
+
+  const counts = useMemo(() => {
+    const c: Record<ForwardStageKey, number> = {
+      assessment: 0,
+      screening: 0,
+      technical: 0,
+      panel: 0,
+    };
+    for (const e of events) {
+      if (e.stage in c) c[e.stage as ForwardStageKey] += 1;
+    }
+    return c;
+  }, [events]);
+
+  const rows = useMemo(
+    () => (filter === "all" ? events : events.filter((e) => e.stage === filter)),
+    [events, filter],
+  );
+
+  const advanceToRound = async (source: PipelineEvent, stage: ForwardStageKey) => {
+    const appId = parseAppIdFromForwardNote(source.notes);
+    const already = events.some(
+      (e) => e.stage === stage && parseAppIdFromForwardNote(e.notes) === appId && appId,
+    );
+    if (already) {
+      toast.message(`Already has a ${FORWARD_STAGES.find((s) => s.key === stage)?.label} entry.`);
+      return;
+    }
+    try {
+      const jd = parseJdFromNotes(source.notes);
+      const linked = appId ? appsById[appId] : undefined;
+      await upsert.mutateAsync({
+        student_id: studentId,
+        employee_id: employeeId ?? source.employee_id,
+        stage,
+        company_name: source.company_name,
+        job_role: source.job_role,
+        event_link: source.event_link,
+        document_url: source.document_url || linked?.resume_file_url || null,
+        status: STAGE_STATUS_OPTIONS[stage][0] ?? "Scheduled",
+        notes: buildForwardNotes(appId, jd),
+      });
+      toast.success(`Added to ${FORWARD_STAGES.find((s) => s.key === stage)?.label}. Original row kept.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to advance round.");
+    }
+  };
+
+  const saveJd = async (event: PipelineEvent, jd: string) => {
+    const appId = parseAppIdFromForwardNote(event.notes);
+    try {
+      await upsert.mutateAsync({
+        id: event.id,
+        student_id: event.student_id,
+        stage: event.stage as ForwardStageKey,
+        notes: buildForwardNotes(appId, jd),
+      });
+      toast.success("Job description saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save JD.");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Forward className="h-4 w-4 text-primary" />
+        <h3 className="font-display text-lg font-semibold">Forwarded</h3>
+        <Badge className="border-border bg-muted text-muted-foreground">{events.length} total</Badge>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {FORWARD_STAGES.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            onClick={() => setFilter((f) => (f === s.key ? "all" : s.key))}
+            className={cn(
+              "rounded-xl border bg-card p-4 text-left shadow-sm transition hover:shadow-md",
+              filter === s.key ? "border-primary ring-2 ring-primary/20" : "border-border",
+            )}
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{s.label}</p>
+            <p className="mt-1 font-display text-2xl font-semibold tabular-nums">{counts[s.key]}</p>
+          </button>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="font-display text-base">
+            {filter === "all" ? "All forwarded stages" : FORWARD_STAGES.find((s) => s.key === filter)?.label}
+          </CardTitle>
+          <CardDescription>
+            Click a row to expand details, paste JD, view resume, and add Screening / Technical / Panel
+            (keeps the current row).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 p-3 sm:p-4">
+          {isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-16 w-full rounded-xl" />
+              <Skeleton className="h-16 w-full rounded-xl" />
+            </div>
+          ) : rows.length === 0 ? (
+            <p className="px-2 py-10 text-center text-sm text-muted-foreground">
+              No forwarded events yet. Mark an application as Forwarded and pick a stage.
+            </p>
+          ) : (
+            rows.map((e) => {
+              const appId = parseAppIdFromForwardNote(e.notes);
+              const linked = appId ? appsById[appId] : undefined;
+              return (
+                <ForwardExpandableRow
+                  key={e.id}
+                  event={e}
+                  expanded={expandedId === e.id}
+                  onToggle={() => setExpandedId((id) => (id === e.id ? null : e.id))}
+                  appliedAt={linked?.applied_at ?? linked?.applied_date}
+                  resumeUrl={e.document_url || linked?.resume_file_url || null}
+                  onSaveJd={(jd) => void saveJd(e, jd)}
+                  onAdvance={(stage) => void advanceToRound(e, stage)}
+                  onDelete={() => {
+                    if (confirm("Delete this forwarded event?")) remove.mutate(e.id);
+                  }}
+                />
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ForwardExpandableRow({
+  event,
+  expanded,
+  onToggle,
+  appliedAt,
+  resumeUrl,
+  onSaveJd,
+  onAdvance,
+  onDelete,
+}: {
+  event: PipelineEvent;
+  expanded: boolean;
+  onToggle: () => void;
+  appliedAt?: string | null;
+  resumeUrl: string | null;
+  onSaveJd: (jd: string) => void;
+  onAdvance: (stage: ForwardStageKey) => void;
+  onDelete: () => void;
+}) {
+  const stage = event.stage as ForwardStageKey;
+  const label = FORWARD_STAGES.find((s) => s.key === stage)?.label ?? event.stage;
+  const [jd, setJd] = useState(() => parseJdFromNotes(event.notes));
+  const logo = companyLogoUrl(event.company_name, event.event_link);
+  const nextRounds = nextForwardRounds(stage);
+
+  useEffect(() => {
+    if (expanded) setJd(parseJdFromNotes(event.notes));
+  }, [expanded, event.id, event.notes]);
+
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-xl border border-border bg-card transition",
+        expanded && "ring-2 ring-primary/15",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40 sm:px-4"
+      >
+        <img
+          src={logo}
+          alt=""
+          className="h-10 w-10 shrink-0 rounded-lg border border-border bg-white object-contain p-1"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.visibility = "hidden";
+          }}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate font-display font-semibold text-foreground">
+              {event.company_name || "Unknown company"}
+            </p>
+            <Badge className={cn("border", STAGE_TONE[stage])}>{label}</Badge>
+            {event.status ? (
+              <span className="text-xs text-muted-foreground">{event.status}</span>
+            ) : null}
+          </div>
+          <p className="mt-0.5 truncate text-sm text-muted-foreground">
+            {event.job_role || "No role"} · Forwarded {formatDateCST(event.created_at)}{" "}
+            {formatTimeCST(event.created_at)}
+          </p>
+        </div>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-muted-foreground transition", expanded && "rotate-180")}
+        />
+      </button>
+
+      {expanded ? (
+        <div className="space-y-4 border-t border-border bg-muted/20 px-3 py-4 sm:px-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MetaChip
+              icon={CalendarDays}
+              label="Applied"
+              value={
+                appliedAt
+                  ? appliedAt.includes("T")
+                    ? `${formatDateCST(appliedAt)} · ${formatTimeCST(appliedAt)}`
+                    : appliedAt
+                  : "—"
+              }
+            />
+            <MetaChip
+              icon={Forward}
+              label="Forwarded"
+              value={`${formatDateCST(event.created_at)} · ${formatTimeCST(event.created_at)}`}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {event.event_link ? (
+              <a
+                href={event.event_link}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-primary hover:bg-muted"
+              >
+                Job link <ExternalLink className="h-3 w-3" />
+              </a>
+            ) : null}
+            {resumeUrl ? (
+              <a
+                href={resumeUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+              >
+                <Upload className="h-3.5 w-3.5" /> Resume from application
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
+                <Upload className="h-3.5 w-3.5" /> No resume on this application
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <FileText className="h-3.5 w-3.5" /> Job description
+            </label>
+            <textarea
+              value={jd}
+              onChange={(e) => setJd(e.target.value)}
+              placeholder="Paste the full job description here…"
+              className="min-h-[120px] w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <div className="flex justify-end">
+              <Button type="button" size="sm" variant="outline" onClick={() => onSaveJd(jd)}>
+                Save JD
+              </Button>
+            </div>
+          </div>
+
+          {nextRounds.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Move to next round
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Creates a new entry in that round. This {label} row stays listed here.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {nextRounds.map((key) => (
+                  <Button
+                    key={key}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onAdvance(key)}
+                  >
+                    + {FORWARD_STAGES.find((s) => s.key === key)?.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">This is the final interview round (Panel).</p>
+          )}
+
+          <div className="flex justify-end border-t border-border pt-3">
+            <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
+              <Trash2 className="h-3.5 w-3.5" /> Delete this row
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MetaChip({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof CalendarDays;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className="mt-0.5 h-4 w-4 text-primary" />
+      <div>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="text-sm font-medium tabular-nums text-foreground">{value}</p>
+      </div>
+    </div>
+  );
+}
