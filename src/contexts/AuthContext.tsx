@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import type { AppRole } from "@/lib/constants";
 
 type AccountStatus = "active" | "pending" | "inactive" | string;
@@ -108,10 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const url = import.meta.env.VITE_SUPABASE_URL;
-    const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    if (!url || !key) {
-      setConfigError("Missing Supabase configuration. Check your .env file.");
+    if (!isSupabaseConfigured) {
+      setConfigError(
+        "Missing Supabase configuration. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in Vercel → Settings → Environment Variables, then redeploy.",
+      );
       setLoading(false);
       return;
     }
