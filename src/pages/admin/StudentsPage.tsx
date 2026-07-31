@@ -235,9 +235,8 @@ export default function AdminStudentsPage() {
         throw new Error(String((data as { error: unknown }).error));
       }
       const newUserId = (data as { user_id?: string })?.user_id;
-      const linked = (data as { linked?: boolean })?.linked;
       const password = (data as { password?: string })?.password;
-      if (newUserId && !linked && password) {
+      if (newUserId && password) {
         const emailRes = await sendWelcomeCredentials({
           user_id: newUserId,
           email: student.email,
@@ -248,7 +247,7 @@ export default function AdminStudentsPage() {
         if (emailRes.success) toast.success("Login created and welcome email sent.");
         else toast.warning(emailRes.error || "Login created; welcome email failed.");
       } else {
-        toast.success(linked ? "Existing login linked." : "Login created.");
+        toast.success("Login created.");
       }
       invalidateAll();
     } catch (err) {

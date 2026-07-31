@@ -99,6 +99,14 @@ Deno.serve(async (req) => {
       const studentId = String(body.student_id ?? "");
       if (!email || !studentId) return json({ error: "student_id and email required" });
 
+      const { data: studentRow, error: stuLookupErr } = await admin
+        .from("students")
+        .select("id, email, assigned_to, status")
+        .eq("id", studentId)
+        .maybeSingle();
+      if (stuLookupErr) return json({ error: stuLookupErr.message });
+      if (!studentRow) return json({ error: "Student not found" });
+
       const password = randomPassword();
       const userId = await ensureAuthUser(admin, email, password);
 
@@ -112,10 +120,29 @@ Deno.serve(async (req) => {
       });
       if (userErr) return json({ error: userErr.message });
 
-      const { error: stuErr } = await admin.from("students").update({ user_id: userId }).eq("id", studentId);
-      if (stuErr) return json({ error: stuErr.message });
+      const nextStatus =
+        studentRow.status === "inactive"
+          ? "inactive"
+          : studentRow.assigned_to
+            ? "active"
+            : studentRow.status || "pending";
 
-      return json({ user_id: userId, password, email });
+      const { data: linked, error: stuErr } = await admin
+        .from("students")
+        .update({
+          user_id: userId,
+          email,
+          status: nextStatus,
+        })
+        .eq("id", studentId)
+        .select("id, user_id")
+        .maybeSingle();
+      if (stuErr) return json({ error: stuErr.message });
+      if (!linked?.id || linked.user_id !== userId) {
+        return json({ error: "Failed to link Auth user to student row" });
+      }
+
+      return json({ user_id: userId, password, email, student_id: studentId });
     }
 
     // Recreate Auth login for an existing employee row (post-migration orphan user_ids)

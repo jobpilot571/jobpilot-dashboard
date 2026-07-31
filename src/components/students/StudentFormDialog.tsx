@@ -110,6 +110,7 @@ export function StudentFormDialog({
     const trimmedPhone = phone.trim();
     const trimmedProgram = program.trim();
     const assigned = assignedTo === "unassigned" ? null : assignedTo;
+    const nextStatus = assigned ? "active" : "pending";
 
     if (!trimmedName || !trimmedEmail) {
       toast.error("Name and email are required.");
@@ -128,6 +129,7 @@ export function StudentFormDialog({
             program: trimmedProgram,
             assigned_to: assigned,
             last_assigned_to: assigned ?? student.last_assigned_to,
+            status: student.status === "inactive" ? "inactive" : assigned ? "active" : student.status || "pending",
           })
           .eq("id", student.id);
         if (error) throw error;
@@ -138,20 +140,38 @@ export function StudentFormDialog({
         return;
       }
 
-      const { data: newStudent, error: insertErr } = await supabase
+      const baseInsert = {
+        name: trimmedName,
+        email: trimmedEmail,
+        phone: trimmedPhone || "",
+        program: trimmedProgram || "",
+        assigned_to: assigned,
+        last_assigned_to: assigned,
+        status: nextStatus,
+        applied_date: joiningDate || getTodayCST(),
+      };
+
+      let newStudent: { id: string } | null = null;
+      const withProfile = await supabase
         .from("students")
         .insert({
-          name: trimmedName,
-          email: trimmedEmail,
-          phone: trimmedPhone,
-          program: trimmedProgram,
-          assigned_to: assigned,
-          applied_date: joiningDate || getTodayCST(),
+          ...baseInsert,
           profile_json: jobRoleCategory ? { job_role_category: jobRoleCategory } : {},
         })
         .select("id")
         .single();
-      if (insertErr) throw insertErr;
+
+      if (withProfile.error && isMissingColumnError(withProfile.error)) {
+        const fallback = await supabase.from("students").insert(baseInsert).select("id").single();
+        if (fallback.error) throw fallback.error;
+        newStudent = fallback.data;
+      } else if (withProfile.error) {
+        throw withProfile.error;
+      } else {
+        newStudent = withProfile.data;
+      }
+
+      if (!newStudent?.id) throw new Error("Student insert returned no id.");
 
       await persistPaymentFields(newStudent.id);
 
@@ -175,10 +195,19 @@ export function StudentFormDialog({
         }
 
         const newUserId = (loginData as { user_id?: string })?.user_id;
-        const linked = (loginData as { linked?: boolean })?.linked;
         const generatedPassword = (loginData as { password?: string })?.password;
 
-        if (newUserId && !linked && sendWelcomeEmail && generatedPassword) {
+        // Confirm link landed on the student row
+        const { data: linkedRow } = await supabase
+          .from("students")
+          .select("user_id")
+          .eq("id", newStudent.id)
+          .maybeSingle();
+        if (!linkedRow?.user_id) {
+          throw new Error("Login was created but not linked to the student profile.");
+        }
+
+        if (newUserId && sendWelcomeEmail && generatedPassword) {
           const emailRes = await sendWelcomeCredentials({
             user_id: newUserId,
             email: trimmedEmail,
@@ -188,14 +217,12 @@ export function StudentFormDialog({
           });
           if (emailRes.success) toast.success("Student created and welcome email sent.");
           else toast.warning("Student created; welcome email failed. Resend from Actions.");
-        } else if (linked) {
-          toast.success("Student created and linked to existing login.");
         } else {
-          toast.success("Student created.");
+          toast.success("Student created with login.");
         }
       } catch (loginEx) {
         toast.warning(
-          `Student saved, but login failed: ${loginEx instanceof Error ? loginEx.message : "unknown error"}`,
+          `Student saved, but login failed: ${loginEx instanceof Error ? loginEx.message : "unknown error"}. Use Create login from Actions.`,
         );
       }
 
