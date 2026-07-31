@@ -246,7 +246,7 @@ export default function AdminStudentsPage() {
           password,
         });
         if (emailRes.success) toast.success("Login created and welcome email sent.");
-        else toast.warning("Login created; welcome email failed.");
+        else toast.warning(emailRes.error || "Login created; welcome email failed.");
       } else {
         toast.success(linked ? "Existing login linked." : "Login created.");
       }

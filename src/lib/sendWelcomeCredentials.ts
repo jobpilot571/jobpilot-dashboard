@@ -24,14 +24,27 @@ export async function sendWelcomeCredentials(input: SendWelcomeInput): Promise<S
     const { data, error } = await supabase.functions.invoke("send-welcome-credentials", {
       body: input,
     });
+    const bodyError =
+      data && typeof data === "object" && "error" in data
+        ? String((data as { error: unknown }).error ?? "")
+        : "";
     if (error) {
-      const msg =
-        (data && typeof data === "object" && "error" in data && String((data as { error: unknown }).error)) ||
-        error.message ||
-        "Edge function error";
-      return { success: false, error: msg };
+      return {
+        success: false,
+        error: bodyError || error.message || "Edge function error",
+        email_status: "failed",
+      };
     }
-    return (data ?? { success: false, error: "Empty response" }) as SendWelcomeResult;
+    const result = (data ?? { success: false, error: "Empty response" }) as SendWelcomeResult;
+    if (!result.success || result.email_status === "not_sent" || result.email_status === "failed") {
+      return {
+        ...result,
+        success: false,
+        error: result.error || bodyError || "Email failed to send",
+        email_status: result.email_status ?? "failed",
+      };
+    }
+    return result;
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
   }

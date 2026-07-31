@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return json({ error: "Missing Authorization" }, 401);
+    if (!authHeader) return json({ error: "Missing Authorization" });
 
     const caller = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
       data: { user: callerUser },
       error: callerErr,
     } = await caller.auth.getUser();
-    if (callerErr || !callerUser) return json({ error: "Unauthorized" }, 401);
+    if (callerErr || !callerUser) return json({ error: "Unauthorized" });
 
     const admin = createClient(supabaseUrl, serviceKey);
     const { data: roleRow } = await admin
@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("id", callerUser.id)
       .maybeSingle();
-    if (roleRow?.role !== "admin") return json({ error: "Admin only" }, 403);
+    if (roleRow?.role !== "admin") return json({ error: "Admin only" });
 
     const body = await req.json();
     const action = String(body.action ?? "");
@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
       const name = String(body.name ?? "").trim();
       const role = String(body.role ?? "Counselor").trim() || "Counselor";
       const jobRoleCategory = String(body.job_role_category ?? "");
-      if (!email || !name) return json({ error: "name and email required" }, 400);
+      if (!email || !name) return json({ error: "name and email required" });
 
       const password = randomPassword();
       const userId = await ensureAuthUser(admin, email, password);
@@ -91,19 +91,22 @@ Deno.serve(async (req) => {
     if (action === "create_student_login") {
       const email = String(body.email ?? "").trim().toLowerCase();
       const studentId = String(body.student_id ?? "");
-      if (!email || !studentId) return json({ error: "student_id and email required" }, 400);
+      if (!email || !studentId) return json({ error: "student_id and email required" });
 
       const password = randomPassword();
       const userId = await ensureAuthUser(admin, email, password);
 
-      await admin.from("users").upsert({
+      const { error: userErr } = await admin.from("users").upsert({
         id: userId,
         email,
         role: "student",
         must_change_password: true,
         temporary_password_active: true,
       });
-      await admin.from("students").update({ user_id: userId }).eq("id", studentId);
+      if (userErr) return json({ error: userErr.message });
+
+      const { error: stuErr } = await admin.from("students").update({ user_id: userId }).eq("id", studentId);
+      if (stuErr) return json({ error: stuErr.message });
 
       return json({ user_id: userId, password, email });
     }
@@ -111,10 +114,10 @@ Deno.serve(async (req) => {
     if (action === "reset_password") {
       const userId = String(body.user_id ?? "");
       const newPassword = String(body.new_password ?? "").trim();
-      if (!userId || !newPassword) return json({ error: "user_id and new_password required" }, 400);
+      if (!userId || !newPassword) return json({ error: "user_id and new_password required" });
 
       const { error } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
-      if (error) return json({ error: error.message }, 400);
+      if (error) return json({ error: error.message });
 
       await admin
         .from("users")
@@ -128,9 +131,9 @@ Deno.serve(async (req) => {
       return json({ ok: true, password: newPassword });
     }
 
-    return json({ error: `Unknown action: ${action}` }, 400);
+    return json({ error: `Unknown action: ${action}` });
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    return json({ error: e instanceof Error ? e.message : String(e) });
   }
 });
 
@@ -139,25 +142,34 @@ async function ensureAuthUser(
   email: string,
   password: string,
 ): Promise<string> {
-  const { data: listed } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  const existing = listed?.users?.find((u) => u.email?.toLowerCase() === email);
-  if (existing) {
-    const { error } = await admin.auth.admin.updateUserById(existing.id, { password });
-    if (error) throw new Error(error.message);
-    return existing.id;
-  }
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
   });
-  if (error || !data.user) throw new Error(error?.message || "Failed to create auth user");
-  return data.user.id;
+  if (!error && data.user) return data.user.id;
+
+  const msg = (error?.message || "").toLowerCase();
+  if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
+    // Paginate to find existing user by email
+    for (let page = 1; page <= 20; page++) {
+      const { data: listed, error: listErr } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+      if (listErr) throw new Error(listErr.message);
+      const existing = listed?.users?.find((u) => u.email?.toLowerCase() === email);
+      if (existing) {
+        const { error: upErr } = await admin.auth.admin.updateUserById(existing.id, { password });
+        if (upErr) throw new Error(upErr.message);
+        return existing.id;
+      }
+      if (!listed?.users?.length || listed.users.length < 200) break;
+    }
+  }
+  throw new Error(error?.message || "Failed to create auth user");
 }
 
 function randomPassword(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(9));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("").slice(0, 12);
+  return `Jp${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("").slice(0, 10)}!`;
 }
 
 function json(payload: unknown, status = 200) {
