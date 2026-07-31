@@ -8,6 +8,7 @@ import {
   Forward,
   ImageIcon,
   Loader2,
+  Plus,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   FORWARD_STAGES,
@@ -59,8 +61,23 @@ export function StudentForwardedTab({
   const uploadShot = useUploadPipelineScreenshot();
   const [filter, setFilter] = useState<"all" | ForwardStageKey>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(true);
+
+  const [stage, setStage] = useState<ForwardStageKey>("screening");
+  const [link, setLink] = useState("");
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
+  const [fwdDate, setFwdDate] = useState(getTodayCST());
+  const [jd, setJd] = useState("");
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const shotInputRef = useRef<HTMLInputElement>(null);
 
   const appsById = useMemo(() => Object.fromEntries(apps.map((a) => [a.id, a])), [apps]);
+
+  useEffect(() => {
+    if (filter !== "all") setStage(filter);
+  }, [filter]);
 
   const counts = useMemo(() => {
     const c: Record<ForwardStageKey, number> = {
@@ -81,31 +98,75 @@ export function StudentForwardedTab({
     [events, filter],
   );
 
-  const advanceToRound = async (source: PipelineEvent, stage: ForwardStageKey) => {
+  const resetForm = () => {
+    setLink("");
+    setCompany("");
+    setRole("");
+    setFwdDate(getTodayCST());
+    setJd("");
+    setScreenshotFile(null);
+    if (shotInputRef.current) shotInputRef.current.value = "";
+  };
+
+  const submitNew = async () => {
+    if (!link.trim()) {
+      toast.error("Application link is required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const created = await upsert.mutateAsync({
+        student_id: studentId,
+        employee_id: employeeId ?? null,
+        stage,
+        company_name: company.trim() || null,
+        job_role: role.trim() || null,
+        event_link: link.trim(),
+        event_date: fwdDate || getTodayCST(),
+        status: STAGE_STATUS_OPTIONS[stage][0] ?? "Pending",
+        notes: buildForwardNotes(null, jd),
+      });
+      if (screenshotFile && created?.id) {
+        await uploadShot.mutateAsync({
+          eventId: created.id,
+          studentId,
+          file: screenshotFile,
+        });
+      }
+      toast.success(`Saved to ${FORWARD_STAGES.find((s) => s.key === stage)?.label}.`);
+      resetForm();
+      setExpandedId(created.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save forwarded application.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const advanceToRound = async (source: PipelineEvent, next: ForwardStageKey) => {
     const appId = parseAppIdFromForwardNote(source.notes);
     const already = events.some(
-      (e) => e.stage === stage && parseAppIdFromForwardNote(e.notes) === appId && appId,
+      (e) => e.stage === next && parseAppIdFromForwardNote(e.notes) === appId && appId,
     );
     if (already) {
-      toast.message(`Already has a ${FORWARD_STAGES.find((s) => s.key === stage)?.label} entry.`);
+      toast.message(`Already has a ${FORWARD_STAGES.find((s) => s.key === next)?.label} entry.`);
       return;
     }
     try {
-      const jd = parseJdFromNotes(source.notes);
       const linked = appId ? appsById[appId] : undefined;
       await upsert.mutateAsync({
         student_id: studentId,
         employee_id: employeeId ?? source.employee_id,
-        stage,
+        stage: next,
         company_name: source.company_name,
         job_role: source.job_role,
         event_link: source.event_link || linked?.applied_link || null,
         event_date: getTodayCST(),
         document_url: source.document_url || linked?.resume_file_url || null,
-        status: STAGE_STATUS_OPTIONS[stage][0] ?? "Scheduled",
-        notes: buildForwardNotes(appId, jd),
+        status: STAGE_STATUS_OPTIONS[next][0] ?? "Scheduled",
+        notes: buildForwardNotes(appId, parseJdFromNotes(source.notes)),
       });
-      toast.success(`Added to ${FORWARD_STAGES.find((s) => s.key === stage)?.label}. Original row kept.`);
+      toast.success(`Added to ${FORWARD_STAGES.find((s) => s.key === next)?.label}. Original row kept.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to advance round.");
     }
@@ -133,10 +194,16 @@ export function StudentForwardedTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Forward className="h-4 w-4 text-primary" />
-        <h3 className="font-display text-lg font-semibold">Forwarded</h3>
-        <Badge className="border-border bg-muted text-muted-foreground">{events.length} total</Badge>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Forward className="h-4 w-4 text-primary" />
+          <h3 className="font-display text-lg font-semibold">Forwarded</h3>
+          <Badge className="border-border bg-muted text-muted-foreground">{events.length} total</Badge>
+        </div>
+        <Button type="button" size="sm" onClick={() => setFormOpen(true)}>
+          <Plus className="h-3.5 w-3.5" />
+          Add forwarded
+        </Button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -156,14 +223,140 @@ export function StudentForwardedTab({
         ))}
       </div>
 
+      {formOpen ? (
+        <Card className="border-primary/30 bg-sky-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="font-display text-base">Add forwarded application</CardTitle>
+            <CardDescription>
+              Enter the application link, forwarded date, and upload a screenshot of the forwarded email.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Stage
+                </label>
+                <Select
+                  className="h-9"
+                  value={stage}
+                  onChange={(e) => setStage(e.target.value as ForwardStageKey)}
+                >
+                  {FORWARD_STAGES.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Forwarded date
+                </label>
+                <Input type="date" className="h-9" value={fwdDate} onChange={(e) => setFwdDate(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Company
+                </label>
+                <Input
+                  className="h-9"
+                  placeholder="Company"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Job role
+                </label>
+                <Input
+                  className="h-9"
+                  placeholder="Job role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Application link *
+              </label>
+              <Input
+                className="h-9"
+                placeholder="https://… job posting or application URL"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <ImageIcon className="h-3.5 w-3.5" /> Screenshot of forwarded email
+              </label>
+              <input
+                ref={shotInputRef}
+                type="file"
+                accept="image/*,.png,.jpg,.jpeg,.webp,.pdf"
+                className="hidden"
+                onChange={(e) => {
+                  setScreenshotFile(e.target.files?.[0] ?? null);
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => shotInputRef.current?.click()}>
+                  <Upload className="h-3.5 w-3.5" />
+                  {screenshotFile ? "Change screenshot" : "Choose screenshot"}
+                </Button>
+                {screenshotFile ? (
+                  <span className="text-xs text-muted-foreground">{screenshotFile.name}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Optional — you can add it later too</span>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Job description (optional)
+              </label>
+              <textarea
+                value={jd}
+                onChange={(e) => setJd(e.target.value)}
+                placeholder="Paste JD…"
+                className="min-h-[80px] w-full rounded-lg border border-input bg-card px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFormOpen(false);
+                  resetForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="button" size="sm" disabled={saving || !link.trim()} onClick={() => void submitNew()}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                Submit forwarded
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="font-display text-base">
             {filter === "all" ? "All forwarded stages" : FORWARD_STAGES.find((s) => s.key === filter)?.label}
           </CardTitle>
           <CardDescription>
-            Each row stores the application link, forwarded date, and a screenshot of the forwarded
-            email. Expand a row to edit details, paste JD, or move to the next round.
+            Expand a row to edit link, date, screenshot, JD, or move to the next round.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 p-3 sm:p-4">
@@ -173,10 +366,18 @@ export function StudentForwardedTab({
               <Skeleton className="h-16 w-full rounded-xl" />
             </div>
           ) : rows.length === 0 ? (
-            <p className="px-2 py-10 text-center text-sm text-muted-foreground">
-              No forwarded events yet. Mark an application as Forwarded and pick a stage (including AI
-              Screening).
-            </p>
+            <div className="space-y-3 px-2 py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                No forwarded rows in this stage yet. Use <strong>Add forwarded</strong> above to submit an
+                application link, date, and screenshot.
+              </p>
+              {!formOpen ? (
+                <Button type="button" size="sm" onClick={() => setFormOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add forwarded
+                </Button>
+              ) : null}
+            </div>
           ) : (
             rows.map((e) => {
               const appId = parseAppIdFromForwardNote(e.notes);
@@ -202,7 +403,7 @@ export function StudentForwardedTab({
                     );
                   }}
                   uploadingShot={uploadShot.isPending}
-                  onAdvance={(stage) => void advanceToRound(e, stage)}
+                  onAdvance={(next) => void advanceToRound(e, next)}
                   onDelete={() => {
                     if (confirm("Delete this forwarded event?")) remove.mutate(e.id);
                   }}
@@ -290,8 +491,7 @@ function ForwardExpandableRow({
             ) : null}
           </div>
           <p className="mt-0.5 truncate text-sm text-muted-foreground">
-            {event.job_role || "No role"} · Forwarded{" "}
-            {event.event_date || formatDateCST(event.created_at)}
+            {event.job_role || "No role"} · Forwarded {event.event_date || formatDateCST(event.created_at)}
           </p>
         </div>
         <ChevronDown
@@ -398,7 +598,7 @@ function ForwardExpandableRow({
                 <img
                   src={event.screenshot_url}
                   alt="Forwarded email screenshot"
-                  className="mt-1 max-h-48 rounded-lg border border-border object-contain bg-white"
+                  className="mt-1 max-h-48 rounded-lg border border-border bg-white object-contain"
                 />
               </a>
             ) : null}
@@ -447,9 +647,6 @@ function ForwardExpandableRow({
             <div className="space-y-2 border-t border-border pt-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Move to next round
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Creates a new entry in that round. This {label} row stays listed here.
               </p>
               <div className="flex flex-wrap gap-2">
                 {nextRounds.map((key) => (

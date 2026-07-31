@@ -175,16 +175,26 @@ export function useUpsertPipelineEvent() {
     mutationFn: async (payload: UpsertPayload) => {
       const { id, ...rest } = payload;
       if (id) {
-        const { error } = await supabase.from("placement_pipeline_events").update(rest).eq("id", id);
+        const { data, error } = await supabase
+          .from("placement_pipeline_events")
+          .update(rest)
+          .eq("id", id)
+          .select("*")
+          .single();
         if (error) throw error;
-      } else {
-        const { data: auth } = await supabase.auth.getUser();
-        const { error } = await supabase.from("placement_pipeline_events").insert({
+        return data as PipelineEvent;
+      }
+      const { data: auth } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from("placement_pipeline_events")
+        .insert({
           ...rest,
           created_by: auth.user?.id ?? null,
-        });
-        if (error) throw error;
-      }
+        })
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data as PipelineEvent;
     },
     onSuccess: async () => {
       await Promise.all([
