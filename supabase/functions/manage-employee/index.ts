@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existingEmp?.id) {
-        await admin
+        const { error: empUpErr } = await admin
           .from("employees")
           .update({
             user_id: userId,
@@ -77,16 +77,18 @@ Deno.serve(async (req) => {
             status: "active",
           })
           .eq("id", existingEmp.id);
+        if (empUpErr) return json({ error: empUpErr.message });
       } else {
-        await admin.from("employees").insert({
+        const { error: empInsErr } = await admin.from("employees").insert({
           user_id: userId,
           name,
           email,
           role,
-          job_role_category: jobRoleCategory,
+          job_role_category: jobRoleCategory || "",
+          avatar: "",
           status: "active",
-          daily_target: 40,
         });
+        if (empInsErr) return json({ error: empInsErr.message });
       }
 
       return json({ user_id: userId, password, email });
