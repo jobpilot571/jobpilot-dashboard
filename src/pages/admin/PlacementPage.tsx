@@ -81,6 +81,7 @@ export default function AdminPlacementPage() {
       .map((r) => {
         const counts: Record<PipelineStage, number> = {
           assessment: r.assessment_count,
+          ai_screening: 0,
           screening: r.screening_count,
           technical: r.technical_count,
           panel: r.panel_count,
