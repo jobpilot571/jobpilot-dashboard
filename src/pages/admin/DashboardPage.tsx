@@ -8,6 +8,7 @@ import {
   Sparkles,
   Target,
   UserCheck,
+  UserMinus,
   Users,
   CalendarDays,
 } from "lucide-react";
@@ -95,6 +96,7 @@ export default function AdminDashboardPage() {
                   value={data.employees.active}
                   hint="Active only"
                   icon={Users}
+                  to="/admin/employees"
                 />
                 <StatCard
                   variant="hero"
@@ -102,6 +104,7 @@ export default function AdminDashboardPage() {
                   value={data.students.active}
                   hint="Active assigned only"
                   icon={GraduationCap}
+                  to="/admin/students?status=active"
                 />
                 <StatCard
                   variant="hero"
@@ -109,13 +112,15 @@ export default function AdminDashboardPage() {
                   value={data.applications.today}
                   hint="America/Chicago calendar day"
                   icon={Briefcase}
+                  to="/admin/reports"
                 />
                 <StatCard
                   variant="hero"
-                  label="Free trials"
-                  value={data.freeTrials.active}
-                  hint={`${data.freeTrials.expiringSoon} ending ≤3 days`}
-                  icon={Sparkles}
+                  label="Unassigned students"
+                  value={data.students.unassigned}
+                  hint="Active & not assigned to a counselor"
+                  icon={UserMinus}
+                  to="/admin/students?status=pending"
                 />
               </>
             )}
@@ -133,12 +138,14 @@ export default function AdminDashboardPage() {
                 hint="Active students with a counselor"
                 icon={UserCheck}
                 tone="success"
+                to="/admin/students?status=active"
               />
               <StatCard
                 label="Apps this week"
                 value={data.applications.week}
                 hint="Mon–Sun CST"
                 icon={CalendarDays}
+                to="/admin/reports"
               />
               <StatCard
                 label="Interviews"
@@ -146,6 +153,7 @@ export default function AdminDashboardPage() {
                 hint="Screening + technical + panel"
                 icon={Target}
                 tone="info"
+                to="/admin/placement"
               />
               <StatCard
                 label="Placements / offers"
@@ -153,6 +161,7 @@ export default function AdminDashboardPage() {
                 hint="Offer-stage pipeline events"
                 icon={CheckCircle2}
                 tone="success"
+                to="/admin/placement"
               />
             </>
           )}
@@ -168,6 +177,7 @@ export default function AdminDashboardPage() {
                 value={data.pipeline.assessment}
                 hint="Forwarded · assessment stage"
                 icon={Briefcase}
+                to="/admin/placement"
               />
               <StatCard
                 label="Screening"
@@ -175,6 +185,7 @@ export default function AdminDashboardPage() {
                 hint="Recruiter screening rounds"
                 icon={Users}
                 tone="info"
+                to="/admin/placement"
               />
               <StatCard
                 label="Technical"
@@ -182,6 +193,7 @@ export default function AdminDashboardPage() {
                 hint="Technical interview rounds"
                 icon={Target}
                 tone="warning"
+                to="/admin/placement"
               />
               <StatCard
                 label="Panel"
@@ -189,6 +201,7 @@ export default function AdminDashboardPage() {
                 hint="Final / panel rounds"
                 icon={CheckCircle2}
                 tone="success"
+                to="/admin/placement"
               />
             </>
           )}
@@ -233,7 +246,11 @@ export default function AdminDashboardPage() {
                         key={row.employeeId}
                         className="border-b border-border/60 transition hover:bg-muted/40 last:border-0"
                       >
-                        <td className="py-3 font-medium text-foreground">{row.name}</td>
+                        <td className="py-3 font-medium text-foreground">
+                          <Link to="/admin/employees" className="hover:underline">
+                            {row.name}
+                          </Link>
+                        </td>
                         <td className="py-3 tabular-nums text-muted-foreground">{row.assignedStudents}</td>
                         <td className="py-3">
                           <span className="inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
@@ -268,23 +285,41 @@ export default function AdminDashboardPage() {
                   All clear — no alerts right now.
                 </p>
               ) : (
-                data.alerts.map((alert) => (
-                  <div
-                    key={alert.id}
-                    className={cn(
-                      "flex gap-3 rounded-xl border px-3 py-3 transition hover:shadow-sm",
-                      alert.tone === "danger" && "border-destructive/20 bg-destructive/5",
-                      alert.tone === "warning" && "border-amber-500/20 bg-amber-500/5",
-                      alert.tone === "info" && "border-sky-500/20 bg-sky-500/5",
-                    )}
-                  >
-                    <AlertToneIcon tone={alert.tone} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground">{alert.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{alert.detail}</p>
+                data.alerts.map((alert) => {
+                  const href =
+                    alert.id === "unassigned"
+                      ? "/admin/students?status=pending"
+                      : alert.id === "trials"
+                        ? "/admin/free-trials"
+                        : alert.id === "low-progress"
+                          ? "/admin/employees"
+                          : undefined;
+                  const body = (
+                    <>
+                      <AlertToneIcon tone={alert.tone} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">{alert.title}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{alert.detail}</p>
+                      </div>
+                    </>
+                  );
+                  const className = cn(
+                    "flex gap-3 rounded-xl border px-3 py-3 transition hover:shadow-sm",
+                    alert.tone === "danger" && "border-destructive/20 bg-destructive/5",
+                    alert.tone === "warning" && "border-amber-500/20 bg-amber-500/5",
+                    alert.tone === "info" && "border-sky-500/20 bg-sky-500/5",
+                    href && "cursor-pointer hover:border-primary/30",
+                  );
+                  return href ? (
+                    <Link key={alert.id} to={href} className={className}>
+                      {body}
+                    </Link>
+                  ) : (
+                    <div key={alert.id} className={className}>
+                      {body}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </CardContent>
           </Card>
@@ -299,9 +334,21 @@ export default function AdminDashboardPage() {
                 <Skeleton className="h-28 w-full" />
               ) : (
                 <>
-                  <StatusRow label="Assigned (active)" value={data.studentStatusSummary.assigned} />
-                  <StatusRow label="Unassigned / pending" value={data.studentStatusSummary.unassigned} />
-                  <StatusRow label="Inactive" value={data.studentStatusSummary.inactive} />
+                  <StatusRow
+                    label="Assigned (active)"
+                    value={data.studentStatusSummary.assigned}
+                    to="/admin/students?status=active"
+                  />
+                  <StatusRow
+                    label="Unassigned / pending"
+                    value={data.studentStatusSummary.unassigned}
+                    to="/admin/students?status=pending"
+                  />
+                  <StatusRow
+                    label="Inactive"
+                    value={data.studentStatusSummary.inactive}
+                    to="/admin/students?status=inactive"
+                  />
                   <div className="pt-2">
                     <Link
                       to="/admin/students"
@@ -327,9 +374,10 @@ export default function AdminDashboardPage() {
                 <p className="text-sm text-muted-foreground">No applications yet.</p>
               ) : (
                 data.recentActivity.map((item) => (
-                  <div
+                  <Link
                     key={item.id}
-                    className="rounded-xl border border-border/80 bg-gradient-to-r from-card to-muted/30 px-3 py-2.5 transition hover:border-primary/25 hover:shadow-sm"
+                    to={`/admin/students/${item.studentId}?tab=apps`}
+                    className="block rounded-xl border border-border/80 bg-gradient-to-r from-card to-muted/30 px-3 py-2.5 transition hover:border-primary/25 hover:shadow-sm"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-medium text-foreground">{item.studentName}</p>
@@ -341,7 +389,7 @@ export default function AdminDashboardPage() {
                       {item.role} · {item.company}
                     </p>
                     <p className="mt-1 text-[11px] font-semibold capitalize text-primary">{item.status}</p>
-                  </div>
+                  </Link>
                 ))
               )}
             </CardContent>
@@ -352,11 +400,24 @@ export default function AdminDashboardPage() {
   );
 }
 
-function StatusRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center justify-between border-b border-border/70 py-2 last:border-0">
+function StatusRow({ label, value, to }: { label: string; value: number; to?: string }) {
+  const inner = (
+    <>
       <span className="text-sm text-muted-foreground">{label}</span>
       <span className="font-display text-lg font-semibold tabular-nums text-foreground">{value}</span>
-    </div>
+    </>
+  );
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className="flex items-center justify-between border-b border-border/70 py-2 last:border-0 hover:text-primary"
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <div className="flex items-center justify-between border-b border-border/70 py-2 last:border-0">{inner}</div>
   );
 }

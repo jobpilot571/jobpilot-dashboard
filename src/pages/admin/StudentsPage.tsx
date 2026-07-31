@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -41,18 +41,48 @@ import { cn } from "@/lib/utils";
 
 export default function AdminStudentsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { data: students = [], isLoading, isError, error, refetch } = useStudents();
   const { data: employees = [] } = useEmployees();
   const { data: statsMap = {} } = useStudentAppStats();
   const emailLogs = useWelcomeEmailLogs(students.map((s) => s.user_id));
 
+  const statusFromUrl = searchParams.get("status");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StudentStatusFilter>("active");
+  const [statusFilter, setStatusFilter] = useState<StudentStatusFilter>(() =>
+    statusFromUrl === "pending" ||
+    statusFromUrl === "active" ||
+    statusFromUrl === "inactive" ||
+    statusFromUrl === "all"
+      ? statusFromUrl
+      : "active",
+  );
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [sortKey, setSortKey] = useState<StudentSortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    const s = searchParams.get("status");
+    if (s === "pending" || s === "active" || s === "inactive" || s === "all") {
+      setStatusFilter(s);
+      setPage(1);
+    }
+  }, [searchParams]);
+
+  const applyStatusFilter = (key: StudentStatusFilter) => {
+    setStatusFilter(key);
+    setPage(1);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("status", key);
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Student | null>(null);
@@ -371,10 +401,7 @@ export default function AdminStudentsPage() {
               <button
                 key={key}
                 type="button"
-                onClick={() => {
-                  setStatusFilter(key);
-                  setPage(1);
-                }}
+                onClick={() => applyStatusFilter(key)}
                 className={cn(
                   "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
                   statusFilter === key

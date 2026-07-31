@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Briefcase, Mail, User } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,30 @@ function CloseSidebarOnJobApps({ active }: { active: boolean }) {
 export default function AdminStudentProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("overview");
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(() =>
+    tabParam === "apps" ||
+    tabParam === "profile" ||
+    tabParam === "details" ||
+    tabParam === "forwarded" ||
+    tabParam === "overview"
+      ? tabParam
+      : "overview",
+  );
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (
+      t === "apps" ||
+      t === "profile" ||
+      t === "details" ||
+      t === "forwarded" ||
+      t === "overview"
+    ) {
+      setTab(t);
+    }
+  }, [searchParams]);
 
   const { data: student, isLoading, isError, error } = useStudentById(id);
   const { data: stats, isLoading: statsLoading } = useStudentOverviewStats(id);
