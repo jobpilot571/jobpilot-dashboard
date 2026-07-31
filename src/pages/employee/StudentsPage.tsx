@@ -86,7 +86,12 @@ export default function EmployeeStudentsPage() {
                     return (
                       <tr key={s.id} className="border-b border-border/70 last:border-0">
                         <td className="px-4 py-3">
-                          <div className="font-medium">{s.name}</div>
+                          <Link
+                            to={`/app/students/${s.id}`}
+                            className="font-medium text-foreground hover:underline"
+                          >
+                            {s.name}
+                          </Link>
                           <div className="text-xs text-muted-foreground">{s.email}</div>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">{s.program || "—"}</td>
@@ -105,7 +110,7 @@ export default function EmployeeStudentsPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <Link
-                            to={`/app/applications?student=${s.id}`}
+                            to={`/app/students/${s.id}?tab=apps`}
                             className="text-xs font-medium text-primary hover:underline"
                           >
                             Log apps

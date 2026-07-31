@@ -5,6 +5,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+type AdminClient = ReturnType<typeof createClient>;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -48,13 +50,15 @@ Deno.serve(async (req) => {
       const password = randomPassword();
       const userId = await ensureAuthUser(admin, email, password);
 
-      await admin.from("users").upsert({
+      await admin.from("users").delete().eq("email", email);
+      const { error: userUpsertErr } = await admin.from("users").upsert({
         id: userId,
         email,
         role: "employee",
         must_change_password: true,
         temporary_password_active: true,
       });
+      if (userUpsertErr) return json({ error: userUpsertErr.message });
 
       const { data: existingEmp } = await admin
         .from("employees")
@@ -96,6 +100,7 @@ Deno.serve(async (req) => {
       const password = randomPassword();
       const userId = await ensureAuthUser(admin, email, password);
 
+      await admin.from("users").delete().eq("email", email);
       const { error: userErr } = await admin.from("users").upsert({
         id: userId,
         email,
@@ -111,24 +116,86 @@ Deno.serve(async (req) => {
       return json({ user_id: userId, password, email });
     }
 
+    // Recreate Auth login for an existing employee row (post-migration orphan user_ids)
+    if (action === "create_employee_login") {
+      const employeeId = String(body.employee_id ?? "");
+      const email = String(body.email ?? "").trim().toLowerCase();
+      if (!employeeId || !email) return json({ error: "employee_id and email required" });
+
+      const password = randomPassword();
+      const userId = await ensureAuthUser(admin, email, password);
+
+      await admin.from("users").delete().eq("email", email);
+      const { error: userErr } = await admin.from("users").upsert({
+        id: userId,
+        email,
+        role: "employee",
+        must_change_password: true,
+        temporary_password_active: true,
+      });
+      if (userErr) return json({ error: userErr.message });
+
+      const { error: empErr } = await admin
+        .from("employees")
+        .update({ user_id: userId })
+        .eq("id", employeeId);
+      if (empErr) return json({ error: empErr.message });
+
+      return json({ user_id: userId, password, email });
+    }
+
     if (action === "reset_password") {
       const userId = String(body.user_id ?? "");
+      const email = String(body.email ?? "").trim().toLowerCase();
+      const role = (String(body.role ?? "employee").toLowerCase() === "student" ? "student" : "employee") as
+        | "student"
+        | "employee";
       const newPassword = String(body.new_password ?? "").trim();
       if (!userId || !newPassword) return json({ error: "user_id and new_password required" });
 
       const { error } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
-      if (error) return json({ error: error.message });
+      if (!error) {
+        await admin
+          .from("users")
+          .update({
+            must_change_password: true,
+            temporary_password_active: true,
+            password_updated_at: new Date().toISOString(),
+          })
+          .eq("id", userId);
+        return json({ ok: true, password: newPassword, user_id: userId });
+      }
 
-      await admin
-        .from("users")
-        .update({
-          must_change_password: true,
-          temporary_password_active: true,
-          password_updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
+      const msg = (error.message || "").toLowerCase();
+      if (!email || (!msg.includes("not found") && !msg.includes("user not found"))) {
+        return json({ error: error.message });
+      }
 
-      return json({ ok: true, password: newPassword });
+      // Auth user missing after DB restore — recreate and remlink
+      const newUserId = await ensureAuthUser(admin, email, newPassword);
+      await admin.from("users").delete().eq("email", email);
+      if (newUserId !== userId) {
+        await admin.from("users").delete().eq("id", userId);
+      }
+      const { error: userErr } = await admin.from("users").insert({
+        id: newUserId,
+        email,
+        role,
+        must_change_password: true,
+        temporary_password_active: true,
+        password_updated_at: new Date().toISOString(),
+      });
+      if (userErr) return json({ error: userErr.message });
+
+      if (role === "employee") {
+        await admin.from("employees").update({ user_id: newUserId }).eq("email", email);
+        await admin.from("employees").update({ user_id: newUserId }).eq("user_id", userId);
+      } else {
+        await admin.from("students").update({ user_id: newUserId }).eq("email", email);
+        await admin.from("students").update({ user_id: newUserId }).eq("user_id", userId);
+      }
+
+      return json({ ok: true, password: newPassword, user_id: newUserId, recreated: true });
     }
 
     return json({ error: `Unknown action: ${action}` });
@@ -137,11 +204,7 @@ Deno.serve(async (req) => {
   }
 });
 
-async function ensureAuthUser(
-  admin: ReturnType<typeof createClient>,
-  email: string,
-  password: string,
-): Promise<string> {
+async function ensureAuthUser(admin: AdminClient, email: string, password: string): Promise<string> {
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password,
@@ -151,7 +214,6 @@ async function ensureAuthUser(
 
   const msg = (error?.message || "").toLowerCase();
   if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
-    // Paginate to find existing user by email
     for (let page = 1; page <= 20; page++) {
       const { data: listed, error: listErr } = await admin.auth.admin.listUsers({ page, perPage: 200 });
       if (listErr) throw new Error(listErr.message);

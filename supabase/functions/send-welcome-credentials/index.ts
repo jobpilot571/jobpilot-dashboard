@@ -7,7 +7,9 @@ const corsHeaders = {
 
 const APP_URL = Deno.env.get("APP_URL") || "https://www.jobpilotagent.online";
 const FROM_EMAIL =
-  Deno.env.get("WELCOME_FROM_EMAIL") || "JobPilot.ai <noreply@notify.jobpilotagent.online>";
+  Deno.env.get("WELCOME_FROM_EMAIL") || "JobPilot.ai <noreply@jobpilot.solutions>";
+
+type AdminClient = ReturnType<typeof createClient>;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -41,7 +43,7 @@ Deno.serve(async (req) => {
     const role = (String(body.role ?? "student").toLowerCase() === "employee" ? "employee" : "student") as
       | "student"
       | "employee";
-    const userId = String(body.user_id ?? "");
+    let userId = String(body.user_id ?? "");
     const isResend = Boolean(body.is_resend);
     const resetPassword = Boolean(body.reset_password);
     let password = body.password ? String(body.password) : "";
@@ -51,18 +53,17 @@ Deno.serve(async (req) => {
     }
 
     // Resend / reset without a password → generate one and apply to Auth
+    // (recreates Auth user if the migrated user_id no longer exists)
     if (!password && (isResend || resetPassword)) {
       password = randomPassword();
-      const { error: pwErr } = await admin.auth.admin.updateUserById(userId, { password });
-      if (pwErr) return json({ success: false, error: pwErr.message });
-      await admin
-        .from("users")
-        .update({
-          must_change_password: true,
-          temporary_password_active: true,
-          password_updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
+      const ensured = await ensurePasswordOnAuth(admin, {
+        userId,
+        email,
+        role,
+        password,
+      });
+      if (!ensured.ok) return json({ success: false, error: ensured.error });
+      userId = ensured.userId;
     }
 
     if (!password) {
@@ -119,7 +120,6 @@ Deno.serve(async (req) => {
         error_message: errMsg,
         subject,
       });
-      // HTTP 200 so the browser receives the error body (Supabase invoke hides non-2xx bodies)
       return json({ success: false, error: errMsg, email_status: "failed" });
     }
 
@@ -141,11 +141,108 @@ Deno.serve(async (req) => {
       email_status: status,
       sent_at: sentAt,
       password_reset: resetPassword || isResend,
+      user_id: userId,
     });
   } catch (e) {
     return json({ success: false, error: e instanceof Error ? e.message : String(e) });
   }
 });
+
+async function ensurePasswordOnAuth(
+  admin: AdminClient,
+  opts: { userId: string; email: string; role: "student" | "employee"; password: string },
+): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+  const { error: pwErr } = await admin.auth.admin.updateUserById(opts.userId, { password: opts.password });
+  if (!pwErr) {
+    await admin
+      .from("users")
+      .update({
+        must_change_password: true,
+        temporary_password_active: true,
+        password_updated_at: new Date().toISOString(),
+      })
+      .eq("id", opts.userId);
+    return { ok: true, userId: opts.userId };
+  }
+
+  const msg = (pwErr.message || "").toLowerCase();
+  if (!msg.includes("not found") && !msg.includes("user not found")) {
+    return { ok: false, error: pwErr.message };
+  }
+
+  // Migrated row points at a missing Auth user — recreate by email and remlink
+  try {
+    const newUserId = await ensureAuthUser(admin, opts.email, opts.password);
+    await relinkIdentity(admin, {
+      oldUserId: opts.userId,
+      newUserId,
+      email: opts.email,
+      role: opts.role,
+    });
+    return { ok: true, userId: newUserId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function ensureAuthUser(admin: AdminClient, email: string, password: string): Promise<string> {
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (!error && data.user) return data.user.id;
+
+  const msg = (error?.message || "").toLowerCase();
+  if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
+    for (let page = 1; page <= 20; page++) {
+      const { data: listed, error: listErr } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+      if (listErr) throw new Error(listErr.message);
+      const existing = listed?.users?.find((u) => u.email?.toLowerCase() === email);
+      if (existing) {
+        const { error: upErr } = await admin.auth.admin.updateUserById(existing.id, { password });
+        if (upErr) throw new Error(upErr.message);
+        return existing.id;
+      }
+      if (!listed?.users?.length || listed.users.length < 200) break;
+    }
+  }
+  throw new Error(error?.message || "Failed to create auth user");
+}
+
+async function relinkIdentity(
+  admin: AdminClient,
+  opts: { oldUserId: string; newUserId: string; email: string; role: "student" | "employee" },
+) {
+  // Migrated orphan rows keep the email under a dead Auth id — clear them first
+  // so users_email_key does not block the new Auth id.
+  await admin.from("users").delete().eq("email", opts.email);
+  if (opts.oldUserId !== opts.newUserId) {
+    await admin.from("users").delete().eq("id", opts.oldUserId);
+  }
+
+  const { error: userErr } = await admin.from("users").insert({
+    id: opts.newUserId,
+    email: opts.email,
+    role: opts.role,
+    must_change_password: true,
+    temporary_password_active: true,
+    password_updated_at: new Date().toISOString(),
+  });
+  if (userErr) throw new Error(userErr.message);
+
+  if (opts.role === "employee") {
+    await admin.from("employees").update({ user_id: opts.newUserId }).eq("email", opts.email);
+    if (opts.oldUserId !== opts.newUserId) {
+      await admin.from("employees").update({ user_id: opts.newUserId }).eq("user_id", opts.oldUserId);
+    }
+  } else {
+    await admin.from("students").update({ user_id: opts.newUserId }).eq("email", opts.email);
+    if (opts.oldUserId !== opts.newUserId) {
+      await admin.from("students").update({ user_id: opts.newUserId }).eq("user_id", opts.oldUserId);
+    }
+  }
+}
 
 function welcomeSubject(name: string, role: string, isResend: boolean, resetPassword: boolean) {
   if (resetPassword && !isResend) return `JobPilot.ai password reset — ${name}`;
@@ -164,11 +261,12 @@ function welcomeHtml(opts: {
 }) {
   const first = opts.name.split(" ")[0] || opts.name;
   const loginUrl = `${opts.appUrl.replace(/\/$/, "")}/login`;
-  const intro = opts.resetPassword && !opts.isResend
-    ? `Your JobPilot.ai password was reset. Use the credentials below to sign in as a <strong>${opts.role}</strong>.`
-    : opts.isResend
-      ? `Here are your JobPilot.ai login details again (as a <strong>${opts.role}</strong>).`
-      : `An account has been created for you on JobPilot.ai as a <strong>${opts.role}</strong>. Use the credentials below to sign in.`;
+  const intro =
+    opts.resetPassword && !opts.isResend
+      ? `Your JobPilot.ai password was reset. Use the credentials below to sign in as a <strong>${opts.role}</strong>.`
+      : opts.isResend
+        ? `Here are your JobPilot.ai login details again (as a <strong>${opts.role}</strong>).`
+        : `An account has been created for you on JobPilot.ai as a <strong>${opts.role}</strong>. Use the credentials below to sign in.`;
 
   return `<!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
@@ -207,7 +305,7 @@ function escapeHtml(s: string) {
 }
 
 async function logEmail(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   row: {
     user_id: string;
     email: string;

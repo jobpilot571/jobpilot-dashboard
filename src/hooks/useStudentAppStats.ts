@@ -6,10 +6,50 @@ export interface StudentAppStats {
   interviewCount: number;
 }
 
+async function exactAppCounts(studentIds: string[]): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  const chunkSize = 20;
+  for (let i = 0; i < studentIds.length; i += chunkSize) {
+    const chunk = studentIds.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map(async (id) => {
+        const { count, error } = await supabase
+          .from("job_applications")
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", id);
+        if (error) throw error;
+        counts[id] = count ?? 0;
+      }),
+    );
+  }
+  return counts;
+}
+
+async function exactInterviewCounts(studentIds: string[]): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  const chunkSize = 20;
+  for (let i = 0; i < studentIds.length; i += chunkSize) {
+    const chunk = studentIds.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map(async (id) => {
+        const { count, error } = await supabase
+          .from("placement_pipeline_events")
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", id)
+          .in("stage", ["screening", "technical", "panel"]);
+        if (error) throw error;
+        counts[id] = count ?? 0;
+      }),
+    );
+  }
+  return counts;
+}
+
 /**
  * Application totals + interview-stage pipeline counts per student.
+ * Uses exact head counts so totals are not capped by PostgREST's default 1000-row page.
  * Pass `studentIds` to scope the query (required for employee workspace).
- * Omit / pass undefined for admin (all students visible via RLS).
+ * Omit / pass undefined for admin (loads all student ids first).
  */
 export function useStudentAppStats(studentIds?: string[]) {
   const scoped = studentIds !== undefined;
@@ -19,31 +59,36 @@ export function useStudentAppStats(studentIds?: string[]) {
     queryKey: ["student-app-stats", idKey],
     enabled: !scoped || studentIds.length > 0,
     queryFn: async () => {
-      if (scoped && studentIds.length === 0) return {} as Record<string, StudentAppStats>;
-
-      let appsQ = supabase.from("job_applications").select("student_id");
-      let interviewsQ = supabase
-        .from("placement_pipeline_events")
-        .select("student_id")
-        .in("stage", ["screening", "technical", "panel"]);
-
-      if (scoped) {
-        appsQ = appsQ.in("student_id", studentIds);
-        interviewsQ = interviewsQ.in("student_id", studentIds);
+      let ids = studentIds ?? [];
+      if (!scoped) {
+        // Paginate student ids (default page is 1000)
+        const all: string[] = [];
+        const pageSize = 1000;
+        for (let from = 0; ; from += pageSize) {
+          const { data, error } = await supabase
+            .from("students")
+            .select("id")
+            .range(from, from + pageSize - 1);
+          if (error) throw error;
+          const rows = data ?? [];
+          all.push(...rows.map((r) => r.id));
+          if (rows.length < pageSize) break;
+        }
+        ids = all;
       }
+      if (ids.length === 0) return {} as Record<string, StudentAppStats>;
 
-      const [appsRes, interviewsRes] = await Promise.all([appsQ, interviewsQ]);
-      if (appsRes.error) throw appsRes.error;
-      if (interviewsRes.error) throw interviewsRes.error;
+      const [appCounts, interviewCounts] = await Promise.all([
+        exactAppCounts(ids),
+        exactInterviewCounts(ids),
+      ]);
 
       const map: Record<string, StudentAppStats> = {};
-      for (const row of appsRes.data ?? []) {
-        if (!map[row.student_id]) map[row.student_id] = { appCount: 0, interviewCount: 0 };
-        map[row.student_id].appCount += 1;
-      }
-      for (const row of interviewsRes.data ?? []) {
-        if (!map[row.student_id]) map[row.student_id] = { appCount: 0, interviewCount: 0 };
-        map[row.student_id].interviewCount += 1;
+      for (const id of ids) {
+        map[id] = {
+          appCount: appCounts[id] ?? 0,
+          interviewCount: interviewCounts[id] ?? 0,
+        };
       }
       return map;
     },

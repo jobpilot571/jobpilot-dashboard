@@ -88,20 +88,27 @@ export default function EmployeeDashboardPage() {
             Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[96px] rounded-xl" />)
           ) : (
             <>
-              <StatCard label="Assigned students" value={students.length} icon={GraduationCap} />
+              <StatCard
+                label="Assigned students"
+                value={students.length}
+                icon={GraduationCap}
+                to="/app/students"
+              />
               <StatCard
                 label="Apps today"
                 value={stats.appsToday}
                 hint={stats.today}
                 icon={Briefcase}
                 tone="info"
+                to="/app/applications"
               />
-              <StatCard label="This week" value={stats.appsThisWeek} icon={CalendarDays} />
+              <StatCard label="This week" value={stats.appsThisWeek} icon={CalendarDays} to="/app/history" />
               <StatCard
                 label="Docs pending"
                 value={stats.docsPending}
                 icon={FileText}
                 tone={stats.docsPending > 0 ? "warning" : "default"}
+                to="/app/students"
               />
             </>
           )}
@@ -197,7 +204,7 @@ export default function EmployeeDashboardPage() {
                         <td className="px-4 py-2.5">
                           <Link
                             className="font-medium text-foreground hover:underline"
-                            to={`/app/applications?student=${s.studentId}`}
+                            to={`/app/students/${s.studentId}`}
                           >
                             {s.studentName}
                           </Link>
@@ -235,7 +242,14 @@ export default function EmployeeDashboardPage() {
                   <tbody>
                     {(stats?.recentApps ?? []).map((a) => (
                       <tr key={a.id} className="border-b border-border/70 last:border-0">
-                        <td className="px-4 py-2.5 font-medium">{a.studentName}</td>
+                        <td className="px-4 py-2.5">
+                          <Link
+                            className="font-medium text-foreground hover:underline"
+                            to={`/app/students/${a.studentId}?tab=apps`}
+                          >
+                            {a.studentName}
+                          </Link>
+                        </td>
                         <td className="px-4 py-2.5">
                           <div>{a.role || "—"}</div>
                           <div className="text-xs text-muted-foreground">

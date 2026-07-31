@@ -17,6 +17,7 @@ import AdminReportsPage from "@/pages/admin/ReportsPage";
 import AdminSettingsPage from "@/pages/admin/SettingsPage";
 import EmployeeDashboardPage from "@/pages/employee/DashboardPage";
 import EmployeeStudentsPage from "@/pages/employee/StudentsPage";
+import EmployeeStudentProfilePage from "@/pages/employee/StudentProfilePage";
 import EmployeeApplicationsPage from "@/pages/employee/ApplicationsPage";
 import EmployeeHistoryPage from "@/pages/employee/HistoryPage";
 import EmployeePerformancePage from "@/pages/employee/PerformancePage";
@@ -60,6 +61,7 @@ export default function App() {
 
             <Route path="/app" element={<ProtectedRoute allowedRole="employee"><EmployeeDashboardPage /></ProtectedRoute>} />
             <Route path="/app/students" element={<ProtectedRoute allowedRole="employee"><EmployeeStudentsPage /></ProtectedRoute>} />
+            <Route path="/app/students/:id" element={<ProtectedRoute allowedRole="employee"><EmployeeStudentProfilePage /></ProtectedRoute>} />
             <Route path="/app/applications" element={<ProtectedRoute allowedRole="employee"><EmployeeApplicationsPage /></ProtectedRoute>} />
             <Route path="/app/history" element={<ProtectedRoute allowedRole="employee"><EmployeeHistoryPage /></ProtectedRoute>} />
             <Route path="/app/performance" element={<ProtectedRoute allowedRole="employee"><EmployeePerformancePage /></ProtectedRoute>} />

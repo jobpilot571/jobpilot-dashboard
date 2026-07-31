@@ -168,7 +168,7 @@ export default function AdminEmployeesPage() {
         reset_password: true,
       });
       if (!res.success) throw new Error(res.error || "Failed to send.");
-      toast.success("Welcome / credentials email sent.");
+      toast.success("New login created / password reset and emailed. Old passwords no longer work.");
       invalidateAll();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send email.");
@@ -190,6 +190,8 @@ export default function AdminEmployeesPage() {
         body: {
           action: "reset_password",
           user_id: resetTarget.user_id,
+          email: resetTarget.email,
+          role: "employee",
           new_password: resetPassword,
         },
       });
@@ -202,9 +204,11 @@ export default function AdminEmployeesPage() {
       if (data && typeof data === "object" && "error" in data && (data as { error: unknown }).error) {
         throw new Error(String((data as { error: unknown }).error));
       }
+      const effectiveUserId =
+        (data as { user_id?: string } | null)?.user_id || resetTarget.user_id;
 
       const emailRes = await sendWelcomeCredentials({
-        user_id: resetTarget.user_id,
+        user_id: effectiveUserId,
         email: resetTarget.email,
         name: resetTarget.name,
         role: "employee",

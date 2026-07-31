@@ -67,14 +67,21 @@ export function useJobApplications(studentId: string | undefined) {
     queryKey: ["job_applications", studentId],
     enabled: !!studentId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("job_applications")
-        .select("*")
-        .eq("student_id", studentId!)
-        .order("applied_at", { ascending: false });
-      if (error) throw error;
-      const rows = (data ?? []) as JobApplication[];
-      return repairSerialNumbersIfNeeded(studentId!, rows);
+      const pageSize = 1000;
+      const all: JobApplication[] = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from("job_applications")
+          .select("*")
+          .eq("student_id", studentId!)
+          .order("applied_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        const rows = (data ?? []) as JobApplication[];
+        all.push(...rows);
+        if (rows.length < pageSize) break;
+      }
+      return repairSerialNumbersIfNeeded(studentId!, all);
     },
   });
 }
