@@ -24,7 +24,9 @@ export default function EmployeeApplicationsPage() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
-  const { data: students = [], isLoading: stuLoading } = useMyStudents(employee?.id);
+  const { data: students = [], isLoading: stuLoading } = useMyStudents(employee?.id, {
+    accessAllStudents: !!employee?.can_access_all_students,
+  });
 
   const studentId = params.get("student") ?? "";
   const selected =

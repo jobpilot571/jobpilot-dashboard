@@ -16,7 +16,11 @@ import { getStudentBucket } from "@/lib/students";
 export default function EmployeeStudentsPage() {
   const { user } = useAuth();
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
-  const { data: students = [], isLoading } = useMyStudents(employee?.id, { includeInactive: true });
+  const accessAll = !!employee?.can_access_all_students;
+  const { data: students = [], isLoading } = useMyStudents(employee?.id, {
+    includeInactive: true,
+    accessAllStudents: accessAll,
+  });
   const { data: appStats = {} } = useStudentAppStats(students.map((s) => s.id));
   const [search, setSearch] = useState("");
 
@@ -40,8 +44,14 @@ export default function EmployeeStudentsPage() {
     <AppShell role="employee">
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight">My students</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Students assigned to you.</p>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">
+            {accessAll ? "All students" : "My students"}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {accessAll
+              ? "You can view and work on every student (employee access)."
+              : "Students assigned to you."}
+          </p>
         </div>
 
         <div className="relative max-w-md">

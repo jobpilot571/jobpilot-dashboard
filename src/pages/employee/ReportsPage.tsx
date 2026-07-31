@@ -23,7 +23,10 @@ export default function EmployeeReportsPage() {
   const { user } = useAuth();
   const defaults = useReportFiltersDefaults();
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
-  const { data: myStudents = [] } = useMyStudents(employee?.id, { includeInactive: true });
+  const { data: myStudents = [] } = useMyStudents(employee?.id, {
+    includeInactive: true,
+    accessAllStudents: !!employee?.can_access_all_students,
+  });
 
   const [filters, setFilters] = useState<ReportFilters>({
     ...defaults,

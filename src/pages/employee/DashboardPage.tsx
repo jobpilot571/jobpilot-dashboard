@@ -27,7 +27,9 @@ export default function EmployeeDashboardPage() {
   const { user } = useAuth();
   const { data: employee, isLoading: empLoading, isError: empError, error: empErr, refetch: refetchEmp } =
     useCurrentEmployee();
-  const { data: students = [], isLoading: stuLoading } = useMyStudents(employee?.id);
+  const { data: students = [], isLoading: stuLoading } = useMyStudents(employee?.id, {
+    accessAllStudents: !!employee?.can_access_all_students,
+  });
   const { data: stats, isLoading: statsLoading, refetch, isFetching } = useEmployeeWorkspaceStats(
     employee,
     students,

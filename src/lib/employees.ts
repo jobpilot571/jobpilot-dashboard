@@ -15,6 +15,8 @@ export interface Employee {
   daily_target?: number | null;
   joining_date?: string | null;
   last_active_at?: string | null;
+  /** Employee can see/work on every student without becoming admin. */
+  can_access_all_students?: boolean | null;
 }
 
 /** Per-student daily application target (DB column or default 40). */
@@ -50,6 +52,7 @@ export function isMissingColumnError(error: { message?: string; code?: string } 
     msg.includes("payment_amount") ||
     msg.includes("joining_date") ||
     msg.includes("last_active_at") ||
+    msg.includes("can_access_all_students") ||
     error.code === "42703" // undefined_column
   );
 }

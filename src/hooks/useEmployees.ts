@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isMissingColumnError, type Employee } from "@/lib/employees";
 
 const SELECT_FULL =
-  "id, user_id, name, email, role, job_role_category, avatar, status, created_at, daily_target, joining_date, last_active_at";
+  "id, user_id, name, email, role, job_role_category, avatar, status, created_at, daily_target, joining_date, last_active_at, can_access_all_students";
 const SELECT_BASE =
   "id, user_id, name, email, role, job_role_category, avatar, status, created_at";
 

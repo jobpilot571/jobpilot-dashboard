@@ -30,6 +30,7 @@ export function EmployeeFormDialog({
   const [jobRoleCategory, setJobRoleCategory] = useState("");
   const [dailyTarget, setDailyTarget] = useState(String(DEFAULT_DAILY_TARGET));
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
+  const [accessAllStudents, setAccessAllStudents] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -39,6 +40,7 @@ export function EmployeeFormDialog({
       setRole(employee.role || "Counselor");
       setJobRoleCategory(employee.job_role_category || "");
       setDailyTarget(String(employee.daily_target ?? DEFAULT_DAILY_TARGET));
+      setAccessAllStudents(!!employee.can_access_all_students);
     } else {
       setName("");
       setEmail("");
@@ -46,6 +48,7 @@ export function EmployeeFormDialog({
       setJobRoleCategory("");
       setDailyTarget(String(DEFAULT_DAILY_TARGET));
       setSendWelcomeEmail(true);
+      setAccessAllStudents(false);
     }
   }, [employee, open]);
 
@@ -85,9 +88,28 @@ export function EmployeeFormDialog({
             email: trimmedEmail,
             role: trimmedRole,
             job_role_category: jobRoleCategory,
+            can_access_all_students: accessAllStudents,
           })
           .eq("id", employee.id);
-        if (error) throw error;
+        if (error) {
+          if (isMissingColumnError(error) && accessAllStudents) {
+            throw new Error(
+              "All-students access column is missing. Apply migration 20260731000000_employee_all_students_access.sql first.",
+            );
+          }
+          if (!isMissingColumnError(error)) throw error;
+          // Column missing and flag false — fall back without the field
+          const { error: fallbackErr } = await supabase
+            .from("employees")
+            .update({
+              name: trimmedName,
+              email: trimmedEmail,
+              role: trimmedRole,
+              job_role_category: jobRoleCategory,
+            })
+            .eq("id", employee.id);
+          if (fallbackErr) throw fallbackErr;
+        }
         await persistDailyTarget(employee.id, target);
         toast.success("Employee updated.");
       } else {
@@ -204,6 +226,20 @@ export function EmployeeFormDialog({
           />
           <p className="text-xs text-muted-foreground">Applications expected per day for this employee.</p>
         </div>
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            className="mt-0.5"
+            checked={accessAllStudents}
+            onChange={(e) => setAccessAllStudents(e.target.checked)}
+          />
+          <span>
+            <span className="font-medium">All students access</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Can view and work on every student. Does not grant admin (no employees, settings, or free trials
+              admin).
+            </span>
+          </span>
+        </label>
         {!isEdit ? (
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={sendWelcomeEmail} onChange={(e) => setSendWelcomeEmail(e.target.checked)} />

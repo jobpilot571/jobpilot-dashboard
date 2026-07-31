@@ -63,6 +63,7 @@ export default function EmployeeStudentProfilePage() {
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
   const { data: myStudents = [], isLoading: myLoading } = useMyStudents(employee?.id, {
     includeInactive: true,
+    accessAllStudents: !!employee?.can_access_all_students,
   });
   const assigned = useMemo(() => myStudents.some((s) => s.id === id), [myStudents, id]);
 

@@ -36,7 +36,9 @@ function consistencyBadgeClass(status: string): string {
 export default function EmployeePerformancePage() {
   const { user } = useAuth();
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
-  const { data: students = [] } = useMyStudents(employee?.id);
+  const { data: students = [] } = useMyStudents(employee?.id, {
+    accessAllStudents: !!employee?.can_access_all_students,
+  });
   const { data: stats, isLoading } = useEmployeeWorkspaceStats(employee, students);
   const today = getTodayCST();
   const from = addDays(today, -13);

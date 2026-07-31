@@ -28,7 +28,10 @@ export default function EmployeeHistoryPage() {
   const [studentId, setStudentId] = useState("all");
 
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
-  const { data: students = [] } = useMyStudents(employee?.id, { includeInactive: true });
+  const { data: students = [] } = useMyStudents(employee?.id, {
+    includeInactive: true,
+    accessAllStudents: !!employee?.can_access_all_students,
+  });
   const studentIds = students.map((s) => s.id);
   const nameById = useMemo(
     () => Object.fromEntries(students.map((s) => [s.id, s.name])),
