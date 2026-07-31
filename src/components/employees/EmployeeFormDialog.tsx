@@ -141,7 +141,16 @@ export function EmployeeFormDialog({
           .select("id")
           .eq("email", trimmedEmail)
           .maybeSingle();
-        if (created?.id) await persistDailyTarget(created.id, target);
+        if (created?.id) {
+          await persistDailyTarget(created.id, target);
+          if (accessAllStudents) {
+            const { error: flagErr } = await supabase
+              .from("employees")
+              .update({ can_access_all_students: true })
+              .eq("id", created.id);
+            if (flagErr && !isMissingColumnError(flagErr)) throw flagErr;
+          }
+        }
 
         if (newUserId && sendWelcomeEmail && generatedPassword) {
           const emailRes = await sendWelcomeCredentials({
