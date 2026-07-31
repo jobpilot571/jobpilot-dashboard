@@ -78,7 +78,7 @@ export function useStudentPipelineEvents(studentId: string | undefined) {
         .from("placement_pipeline_events")
         .select("*")
         .eq("student_id", studentId!)
-        .in("stage", ["assessment", "screening", "technical", "panel"])
+        .in("stage", ["assessment", "ai_screening", "screening", "technical", "panel"])
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as PipelineEvent[];
@@ -215,6 +215,40 @@ export function useDeletePipelineEvent() {
         qc.invalidateQueries({ queryKey: ["admin-dashboard-stats"] }),
         qc.invalidateQueries({ queryKey: ["student-overview-stats"] }),
       ]);
+    },
+  });
+}
+
+/** Upload a forwarded-email screenshot into the resumes bucket (screenshots/ prefix). */
+export function useUploadPipelineScreenshot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { eventId: string; studentId: string; file: File }) => {
+      const ext = input.file.name.split(".").pop()?.toLowerCase() || "png";
+      const path = `screenshots/${input.studentId}/${input.eventId}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("resumes").upload(path, input.file, {
+        upsert: true,
+        contentType: input.file.type || "image/png",
+      });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("resumes").getPublicUrl(path);
+      let url = pub?.publicUrl ?? "";
+      if (!url) {
+        const { data: signed } = await supabase.storage
+          .from("resumes")
+          .createSignedUrl(path, 60 * 60 * 24 * 365);
+        url = signed?.signedUrl ?? "";
+      }
+      if (!url) throw new Error("Could not get screenshot URL");
+      const { error } = await supabase
+        .from("placement_pipeline_events")
+        .update({ screenshot_url: url })
+        .eq("id", input.eventId);
+      if (error) throw error;
+      return url;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["pipeline_events"] });
     },
   });
 }

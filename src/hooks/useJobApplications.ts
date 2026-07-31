@@ -28,13 +28,16 @@ export const APP_STATUSES = [
 
 export type AppStatus = (typeof APP_STATUSES)[number]["value"];
 
-/** Re-number 0/null serials chronologically so Sl works for older imports. */
+/** Re-number 0/null serials chronologically so Sl works for older imports.
+ * Skipped for large imports — mass UPDATEs on fetch were timing out and
+ * making the apps list look empty for employees.
+ */
 async function repairSerialNumbersIfNeeded(
   studentId: string,
   rows: JobApplication[],
 ): Promise<JobApplication[]> {
   const broken = rows.filter((r) => !r.serial_no || r.serial_no <= 0);
-  if (broken.length === 0) return rows;
+  if (broken.length === 0 || broken.length > 40) return rows;
 
   const ordered = [...rows].sort(
     (a, b) =>

@@ -3,6 +3,8 @@ import { toast } from "sonner";
 import {
   CalendarDays,
   Check,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
   Loader2,
   Plus,
@@ -38,6 +40,7 @@ import {
 } from "@/features/placement/constants";
 import { autofillFromJobLink, JOB_LINK_GUIDANCE } from "@/lib/jobLinkAutofill";
 import { enrichJobLinkWithAi } from "@/lib/parseJobLinkAi";
+import { groupAppHistory, type HistoryBucket } from "@/lib/appHistoryGroups";
 import { getNowCST, getTodayCST, formatTimeCST } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 
@@ -50,7 +53,7 @@ export function StudentJobApplicationsTab({
 }) {
   const today = getTodayCST();
   const now = getNowCST();
-  const { data: apps = [], isLoading } = useJobApplications(studentId);
+  const { data: apps = [], isLoading, isError, error } = useJobApplications(studentId);
   const { data: pipeline = [] } = useStudentPipelineEvents(studentId);
   const add = useAddJobApplication(studentId);
   const update = useUpdateJobApplication(studentId);
@@ -66,26 +69,36 @@ export function StudentJobApplicationsTab({
   const [draftStage, setDraftStage] = useState<ForwardStageKey | "">("");
   const [autofilling, setAutofilling] = useState(false);
   const [autofillNote, setAutofillNote] = useState<string | null>(null);
-  const [range, setRange] = useState<"today" | "all">("today");
-  const visibleApps = useMemo(() => {
-    const list = range === "today" ? apps.filter((a) => a.applied_date === today) : apps;
+  const [historyBucket, setHistoryBucket] = useState<HistoryBucket>("daily");
+  const [expandedHistoryKey, setExpandedHistoryKey] = useState<string | null>(null);
+
+  const todayApps = useMemo(() => {
+    const list = apps.filter((a) => a.applied_date === today);
     return [...list].sort((a, b) => {
       if (b.serial_no !== a.serial_no) return b.serial_no - a.serial_no;
       return new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime();
     });
-  }, [apps, today, range]);
+  }, [apps, today]);
 
-  const todayCount = useMemo(
-    () => apps.filter((a) => a.applied_date === today).length,
+  const historyGroups = useMemo(
+    () => groupAppHistory(apps, historyBucket, today),
+    [apps, historyBucket, today],
+  );
+
+  const pastCount = useMemo(
+    () => apps.filter((a) => a.applied_date !== today).length,
     [apps, today],
   );
+
+  const todayCount = todayApps.length;
 
   const stageByAppId = useMemo(() => {
     const map: Record<string, PipelineEvent> = {};
     const rank: Record<string, number> = {
-      panel: 4,
-      technical: 3,
-      screening: 2,
+      panel: 5,
+      technical: 4,
+      screening: 3,
+      ai_screening: 2,
       assessment: 1,
     };
     for (const e of pipeline) {
@@ -168,6 +181,7 @@ export function StudentJobApplicationsTab({
         company_name: app.company_name || null,
         job_role: app.job_role || null,
         event_link: app.applied_link || null,
+        event_date: getTodayCST(),
         document_url: app.resume_file_url || null,
         status: defaultStatus,
         notes: appForwardNote(app.id),
@@ -211,252 +225,371 @@ export function StudentJobApplicationsTab({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <CalendarDays className="h-4 w-4 text-primary" />
-          <h3 className="font-display text-lg font-semibold">
-            {range === "today" ? "Today's Applications" : "All Applications"}
-          </h3>
-          <Badge className="border-border bg-muted text-muted-foreground">
-            {visibleApps.length} shown
-          </Badge>
-          <div className="ml-1 flex rounded-lg border border-border bg-card p-0.5 text-xs">
-            <button
-              type="button"
-              className={cn(
-                "rounded-md px-2.5 py-1 font-medium transition",
-                range === "today" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => setRange("today")}
-            >
-              Today ({todayCount})
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "rounded-md px-2.5 py-1 font-medium transition",
-                range === "all" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => setRange("all")}
-            >
-              All previous ({apps.length})
-            </button>
-          </div>
+    <div className="space-y-8">
+      {isError ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          Could not load applications: {error instanceof Error ? error.message : "Unknown error"}
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => setDraftOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          Add Row
-        </Button>
-      </div>
+      ) : null}
 
-      <p className="text-xs text-muted-foreground">{JOB_LINK_GUIDANCE}</p>
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-primary" />
+            <h3 className="font-display text-lg font-semibold">Today&apos;s Applications</h3>
+            <Badge className="border-border bg-muted text-muted-foreground">{todayCount} saved</Badge>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={() => setDraftOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Add Row
+          </Button>
+        </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[1080px] text-left text-sm">
-          <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2.5 font-medium">Sl</th>
-              <th className="px-3 py-2.5 font-medium">Date</th>
-              <th className="px-3 py-2.5 font-medium">Applied Link</th>
-              <th className="px-3 py-2.5 font-medium">Job Role</th>
-              <th className="px-3 py-2.5 font-medium">Company</th>
-              <th className="px-3 py-2.5 font-medium">Time</th>
-              <th className="px-3 py-2.5 font-medium">Resume</th>
-              <th className="px-3 py-2.5 font-medium">Status</th>
-              <th className="px-3 py-2.5 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {draftOpen ? (
-              <tr className="border-b border-border bg-sky-50/80">
-                <td className="px-3 py-2 text-xs font-semibold text-sky-700">New</td>
-                <td className="px-3 py-2 tabular-nums text-muted-foreground">{today}</td>
-                <td className="px-3 py-2">
-                  <div className="space-y-1">
-                    <div className="flex gap-1">
-                      <Input
-                        className="h-8"
-                        placeholder="Paste job posting URL…"
-                        value={link}
-                        onChange={(e) => setLink(e.target.value)}
-                        onBlur={() => {
-                          if (link.trim()) void runAutofill(link);
-                        }}
-                        onPaste={(e) => {
-                          const text = e.clipboardData.getData("text");
-                          if (text) {
-                            setTimeout(() => void runAutofill(text), 0);
-                          }
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="h-8 w-8 shrink-0"
-                        title="Autofill company & role from link"
-                        disabled={autofilling || !link.trim()}
-                        onClick={() => void runAutofill(link, { forceAi: true })}
-                      >
-                        {autofilling ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                    </div>
-                    {autofillNote ? (
-                      <p className="text-[10px] text-muted-foreground">{autofillNote}</p>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <Input
-                    className="h-8"
-                    placeholder="Job role"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <Input
-                    className="h-8"
-                    placeholder="Company"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                  />
-                </td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{now.time}</td>
-                <td className="px-3 py-2 text-muted-foreground text-xs">After save</td>
-                <td className="px-3 py-2">
-                  <AppStatusMenu
-                    status={status}
-                    forwardStage={draftStage}
-                    onSelectStatus={(next) => {
-                      setStatus(next);
-                      setDraftStage("");
-                    }}
-                    onSelectForwardStage={(stage) => {
-                      setStatus("forwarded");
-                      setDraftStage(stage);
-                    }}
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex gap-1">
-                    <Button
-                      type="button"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={add.isPending || !link.trim() || !status}
-                      onClick={saveDraft}
-                      title="Save"
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      onClick={() => setDraftOpen(false)}
-                      title="Cancel"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </td>
+        <p className="text-xs text-muted-foreground">{JOB_LINK_GUIDANCE}</p>
+
+        <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+          <table className="w-full min-w-[1080px] text-left text-sm">
+            <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2.5 font-medium">Sl</th>
+                <th className="px-3 py-2.5 font-medium">Date</th>
+                <th className="px-3 py-2.5 font-medium">Applied Link</th>
+                <th className="px-3 py-2.5 font-medium">Job Role</th>
+                <th className="px-3 py-2.5 font-medium">Company</th>
+                <th className="px-3 py-2.5 font-medium">Time</th>
+                <th className="px-3 py-2.5 font-medium">Resume</th>
+                <th className="px-3 py-2.5 font-medium">Status</th>
+                <th className="px-3 py-2.5 font-medium">Actions</th>
               </tr>
-            ) : null}
-
-            {isLoading
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <tr key={i}>
-                    <td colSpan={9} className="px-3 py-2">
-                      <Skeleton className="h-8 w-full" />
-                    </td>
-                  </tr>
-                ))
-              : visibleApps.map((a) => {
-                  const linked = stageByAppId[a.id];
-                  const fwdStage = (linked?.stage as ForwardStageKey | undefined) ?? "";
-                  return (
-                    <tr key={a.id} className="border-b border-border/70 last:border-0">
-                      <td className="px-3 py-2.5 tabular-nums font-medium text-foreground">
-                        {a.serial_no > 0 ? a.serial_no : "—"}
-                      </td>
-                      <td className="px-3 py-2.5 tabular-nums">{a.applied_date}</td>
-                      <td className="px-3 py-2.5">
-                        {a.applied_link ? (
-                          <a
-                            href={a.applied_link}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex max-w-[220px] items-center gap-1 truncate text-primary hover:underline"
-                          >
-                            {a.applied_link.replace(/^https?:\/\//, "").slice(0, 36)}…
-                            <ExternalLink className="h-3 w-3 shrink-0" />
-                          </a>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">{a.job_role || "—"}</td>
-                      <td className="px-3 py-2.5">{a.company_name || "—"}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground">
-                        {a.applied_time || (a.applied_at ? formatTimeCST(a.applied_at) : "—")}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <ResumeCell
-                          app={a}
-                          uploading={uploadResume.isPending}
-                          onUpload={(file) =>
-                            uploadResume.mutate({ applicationId: a.id, file })
-                          }
-                        />
-                      </td>
-                      <td className="relative px-3 py-2.5">
-                        <AppStatusMenu
-                          status={a.status}
-                          forwardStage={a.status === "forwarded" ? fwdStage : ""}
-                          onSelectStatus={(next) => {
-                            void update.mutateAsync({ id: a.id, updates: { status: next } });
+            </thead>
+            <tbody>
+              {draftOpen ? (
+                <tr className="border-b border-border bg-sky-50/80">
+                  <td className="px-3 py-2 text-xs font-semibold text-sky-700">New</td>
+                  <td className="px-3 py-2 tabular-nums text-muted-foreground">{today}</td>
+                  <td className="px-3 py-2">
+                    <div className="space-y-1">
+                      <div className="flex gap-1">
+                        <Input
+                          className="h-8"
+                          placeholder="Paste job posting URL…"
+                          value={link}
+                          onChange={(e) => setLink(e.target.value)}
+                          onBlur={() => {
+                            if (link.trim()) void runAutofill(link);
                           }}
-                          onSelectForwardStage={(stage) => {
-                            void applyForwardStage(a, stage);
+                          onPaste={(e) => {
+                            const text = e.clipboardData.getData("text");
+                            if (text) {
+                              setTimeout(() => void runAutofill(text), 0);
+                            }
                           }}
                         />
-                      </td>
-                      <td className="px-3 py-2.5">
                         <Button
                           type="button"
                           size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            if (confirm("Delete this application?")) remove.mutate(a.id);
-                          }}
+                          variant="outline"
+                          className="h-8 w-8 shrink-0"
+                          title="Autofill company & role from link"
+                          disabled={autofilling || !link.trim()}
+                          onClick={() => void runAutofill(link, { forceAi: true })}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {autofilling ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3.5 w-3.5" />
+                          )}
                         </Button>
+                      </div>
+                      {autofillNote ? (
+                        <p className="text-[10px] text-muted-foreground">{autofillNote}</p>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <Input
+                      className="h-8"
+                      placeholder="Job role"
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <Input
+                      className="h-8"
+                      placeholder="Company"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">{now.time}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">After save</td>
+                  <td className="px-3 py-2">
+                    <AppStatusMenu
+                      status={status}
+                      forwardStage={draftStage}
+                      onSelectStatus={(next) => {
+                        setStatus(next);
+                        setDraftStage("");
+                      }}
+                      onSelectForwardStage={(stage) => {
+                        setStatus("forwarded");
+                        setDraftStage(stage);
+                      }}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={add.isPending || !link.trim() || !status}
+                        onClick={saveDraft}
+                        title="Save"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => setDraftOpen(false)}
+                        title="Cancel"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
+
+              {isLoading
+                ? Array.from({ length: 3 }).map((_, i) => (
+                    <tr key={i}>
+                      <td colSpan={9} className="px-3 py-2">
+                        <Skeleton className="h-8 w-full" />
                       </td>
                     </tr>
-                  );
-                })}
-            {!isLoading && visibleApps.length === 0 && !draftOpen ? (
-              <tr>
-                <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">
-                  {range === "today"
-                    ? "No applications logged today. Switch to “All previous” to see older links, or click Add Row."
-                    : "No applications for this student yet. Click Add Row to start."}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+                  ))
+                : todayApps.map((a) => (
+                    <AppTableRow
+                      key={a.id}
+                      a={a}
+                      fwdStage={(stageByAppId[a.id]?.stage as ForwardStageKey | undefined) ?? ""}
+                      update={update}
+                      remove={remove}
+                      uploadResume={uploadResume}
+                      applyForwardStage={applyForwardStage}
+                    />
+                  ))}
+              {!isLoading && todayApps.length === 0 && !draftOpen ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">
+                    No applications logged today. Click Add Row, or open history below for older links.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-display text-lg font-semibold">Job Applications History</h3>
+          <Badge className="border-border bg-muted text-muted-foreground">{pastCount} past</Badge>
+        </div>
+        <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1 shadow-sm">
+          {(
+            [
+              ["daily", "Daily"],
+              ["weekly", "Weekly"],
+              ["monthly", "Monthly"],
+              ["yearly", "Yearly"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                setHistoryBucket(id);
+                setExpandedHistoryKey(null);
+              }}
+              className={cn(
+                "rounded-lg px-3.5 py-2 text-sm font-medium transition",
+                historyBucket === id
+                  ? "bg-muted text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          {isLoading ? (
+            <div className="space-y-2 p-4">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : historyGroups.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+              No previous applications yet.
+            </p>
+          ) : (
+            historyGroups.map((g) => {
+              const open = expandedHistoryKey === g.key;
+              return (
+                <div key={g.key} className="border-b border-border last:border-0">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/40"
+                    onClick={() => setExpandedHistoryKey(open ? null : g.key)}
+                  >
+                    {open ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <CalendarDays className="h-4 w-4 text-primary" />
+                    <span className="flex-1 font-medium text-foreground">{g.label}</span>
+                    <span className="text-sm tabular-nums text-muted-foreground">{g.count} apps</span>
+                  </button>
+                  {open ? (
+                    <div className="overflow-x-auto border-t border-border bg-muted/20">
+                      <table className="w-full min-w-[960px] text-left text-sm">
+                        <thead className="text-xs uppercase tracking-wide text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2 font-medium">Sl</th>
+                            <th className="px-3 py-2 font-medium">Date</th>
+                            <th className="px-3 py-2 font-medium">Applied Link</th>
+                            <th className="px-3 py-2 font-medium">Job Role</th>
+                            <th className="px-3 py-2 font-medium">Company</th>
+                            <th className="px-3 py-2 font-medium">Time</th>
+                            <th className="px-3 py-2 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...g.apps]
+                            .sort((a, b) => b.serial_no - a.serial_no)
+                            .map((a) => (
+                              <tr key={a.id} className="border-t border-border/60">
+                                <td className="px-3 py-2 tabular-nums">{a.serial_no > 0 ? a.serial_no : "—"}</td>
+                                <td className="px-3 py-2 tabular-nums">{a.applied_date}</td>
+                                <td className="px-3 py-2">
+                                  {a.applied_link ? (
+                                    <a
+                                      href={a.applied_link}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex max-w-[260px] items-center gap-1 truncate text-primary hover:underline"
+                                    >
+                                      {a.applied_link.replace(/^https?:\/\//, "").slice(0, 40)}…
+                                      <ExternalLink className="h-3 w-3 shrink-0" />
+                                    </a>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">{a.job_role || "—"}</td>
+                                <td className="px-3 py-2">{a.company_name || "—"}</td>
+                                <td className="px-3 py-2 text-muted-foreground">
+                                  {a.applied_time || (a.applied_at ? formatTimeCST(a.applied_at) : "—")}
+                                </td>
+                                <td className="px-3 py-2 capitalize">{a.status || "—"}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
     </div>
+  );
+}
+
+function AppTableRow({
+  a,
+  fwdStage,
+  update,
+  remove,
+  uploadResume,
+  applyForwardStage,
+}: {
+  a: JobApplication;
+  fwdStage: ForwardStageKey | "";
+  update: ReturnType<typeof useUpdateJobApplication>;
+  remove: ReturnType<typeof useDeleteJobApplication>;
+  uploadResume: ReturnType<typeof useUploadApplicationResume>;
+  applyForwardStage: (app: JobApplication, stage: ForwardStageKey) => Promise<void>;
+}) {
+  return (
+    <tr className="border-b border-border/70 last:border-0">
+      <td className="px-3 py-2.5 tabular-nums font-medium text-foreground">
+        {a.serial_no > 0 ? a.serial_no : "—"}
+      </td>
+      <td className="px-3 py-2.5 tabular-nums">{a.applied_date}</td>
+      <td className="px-3 py-2.5">
+        {a.applied_link ? (
+          <a
+            href={a.applied_link}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex max-w-[220px] items-center gap-1 truncate text-primary hover:underline"
+          >
+            {a.applied_link.replace(/^https?:\/\//, "").slice(0, 36)}…
+            <ExternalLink className="h-3 w-3 shrink-0" />
+          </a>
+        ) : (
+          "—"
+        )}
+      </td>
+      <td className="px-3 py-2.5">{a.job_role || "—"}</td>
+      <td className="px-3 py-2.5">{a.company_name || "—"}</td>
+      <td className="px-3 py-2.5 text-muted-foreground">
+        {a.applied_time || (a.applied_at ? formatTimeCST(a.applied_at) : "—")}
+      </td>
+      <td className="px-3 py-2.5">
+        <ResumeCell
+          app={a}
+          uploading={uploadResume.isPending}
+          onUpload={(file) => uploadResume.mutate({ applicationId: a.id, file })}
+        />
+      </td>
+      <td className="relative px-3 py-2.5">
+        <AppStatusMenu
+          status={a.status}
+          forwardStage={a.status === "forwarded" ? fwdStage : ""}
+          onSelectStatus={(next) => {
+            void update.mutateAsync({ id: a.id, updates: { status: next } });
+          }}
+          onSelectForwardStage={(stage) => {
+            void applyForwardStage(a, stage);
+          }}
+        />
+      </td>
+      <td className="px-3 py-2.5">
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8"
+          onClick={() => {
+            if (confirm("Delete this application?")) remove.mutate(a.id);
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </td>
+    </tr>
   );
 }
 

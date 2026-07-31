@@ -88,7 +88,7 @@ export function useStudentOverviewStats(studentId: string | undefined) {
             .from("placement_pipeline_events")
             .select("stage, created_at")
             .eq("student_id", id)
-            .in("stage", ["assessment", "screening", "technical", "panel"]),
+            .in("stage", ["assessment", "ai_screening", "screening", "technical", "panel"]),
           countPipelineStage(id, "assessment"),
           countPipelineStage(id, "screening"),
           countPipelineStage(id, "technical"),

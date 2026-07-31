@@ -4,6 +4,7 @@
  */
 export const PLACEMENT_STAGES = [
   { key: "assessment", label: "Active job search / Assessment" },
+  { key: "ai_screening", label: "AI Screening" },
   { key: "screening", label: "Recruiter screening" },
   { key: "technical", label: "Interview scheduled / Technical" },
   { key: "panel", label: "Final round / Panel" },

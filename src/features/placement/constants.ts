@@ -8,6 +8,7 @@ export type PipelineStage = PlacementStageKey;
 
 export const STAGE_STATUS_OPTIONS: Record<PipelineStage, string[]> = {
   assessment: ["Pending", "Passed", "Failed", "No Response"],
+  ai_screening: ["Pending", "Passed", "Failed", "No Response", "Scheduled"],
   screening: ["Scheduled", "Completed", "Cancelled", "No Show", "Waiting Feedback"],
   technical: ["Scheduled", "Completed", "Passed", "Failed", "Waiting Feedback"],
   panel: ["Scheduled", "Completed", "Passed", "Failed", "Waiting Feedback"],
@@ -19,18 +20,21 @@ export const STAGE_META = PLACEMENT_STAGES.map((s) => ({
   short:
     s.key === "assessment"
       ? "Assess"
-      : s.key === "screening"
-        ? "Screen"
-        : s.key === "technical"
-          ? "Tech"
-          : s.key === "panel"
-            ? "Panel"
-            : "Offer",
+      : s.key === "ai_screening"
+        ? "AI"
+        : s.key === "screening"
+          ? "Screen"
+          : s.key === "technical"
+            ? "Tech"
+            : s.key === "panel"
+              ? "Panel"
+              : "Offer",
 }));
 
 /** Stages shown after selecting Forwarded on a job application. */
 export const FORWARD_STAGES = [
   { key: "assessment" as const, label: "Assessment" },
+  { key: "ai_screening" as const, label: "AI Screening" },
   { key: "screening" as const, label: "Screening" },
   { key: "technical" as const, label: "Technical" },
   { key: "panel" as const, label: "Panel" },
@@ -67,9 +71,9 @@ export function buildForwardNotes(appId: string | null | undefined, jd: string):
 
 /** Later interview rounds a user can add from the current stage (keeps current row). */
 export function nextForwardRounds(current: ForwardStageKey): ForwardStageKey[] {
-  const order: ForwardStageKey[] = ["assessment", "screening", "technical", "panel"];
+  const order: ForwardStageKey[] = ["assessment", "ai_screening", "screening", "technical", "panel"];
   const idx = order.indexOf(current);
-  if (idx < 0) return ["screening", "technical", "panel"];
+  if (idx < 0) return ["ai_screening", "screening", "technical", "panel"];
   return order.slice(idx + 1);
 }
 
