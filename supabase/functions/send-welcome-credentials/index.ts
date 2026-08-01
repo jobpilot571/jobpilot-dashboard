@@ -5,7 +5,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const APP_URL = Deno.env.get("APP_URL") || "https://www.jobpilotagent.online";
+const DEFAULT_APP_URL = "https://www.jobpilotagent.online";
+
+/** Prefer www — apex SSL is unreliable on this domain. */
+function resolveAppUrl(): string {
+  const raw = (Deno.env.get("APP_URL") || DEFAULT_APP_URL).trim();
+  try {
+    const u = new URL(raw);
+    if (u.hostname === "jobpilotagent.online" || u.hostname === "www.jobpilotagent.online") {
+      return DEFAULT_APP_URL;
+    }
+    return u.origin;
+  } catch {
+    return DEFAULT_APP_URL;
+  }
+}
+
+const APP_URL = resolveAppUrl();
 const FROM_EMAIL =
   Deno.env.get("WELCOME_FROM_EMAIL") || "JobPilot.ai <noreply@jobpilot.solutions>";
 
