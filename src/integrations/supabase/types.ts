@@ -269,6 +269,7 @@ export type Database = {
       employees: {
         Row: {
           avatar: string
+          can_access_all_students: boolean
           created_at: string
           daily_target: number
           email: string
@@ -284,6 +285,7 @@ export type Database = {
         }
         Insert: {
           avatar?: string
+          can_access_all_students?: boolean
           created_at?: string
           daily_target?: number
           email: string
@@ -299,6 +301,7 @@ export type Database = {
         }
         Update: {
           avatar?: string
+          can_access_all_students?: boolean
           created_at?: string
           daily_target?: number
           email?: string
