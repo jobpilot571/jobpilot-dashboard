@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createAuthStorage } from "@/lib/authStorage";
 import type { Database } from "./types";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? "";
@@ -11,6 +12,7 @@ export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE
 /**
  * Always construct a client so module import never throws.
  * Calls fail until real VITE_SUPABASE_* values are set in the host env.
+ * Native (Capacitor) uses Preferences for session persistence.
  */
 export const supabase: SupabaseClient<Database> = createClient<Database>(
   SUPABASE_URL || "https://placeholder.supabase.co",
@@ -18,9 +20,11 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1wbGFjZWhvbGRlciJ9.placeholder",
   {
     auth: {
-      storage: localStorage,
+      storage: createAuthStorage(),
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: true,
+      flowType: "pkce",
     },
   },
 );

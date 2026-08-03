@@ -32,3 +32,17 @@ lovable_export/
 supabase/.temp/
 .vercel
 .env*
+
+# Capacitor / native
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/captures/
+android/.idea/
+ios/App/Pods/
+ios/App/Podfile.lock
+ios/DerivedData/
+*.keystore
+*.jks
+!debug.keystore
