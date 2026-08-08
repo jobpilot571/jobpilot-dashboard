@@ -51,7 +51,17 @@ Deno.serve(async (req) => {
 
     const admin = createClient(supabaseUrl, serviceKey);
     const { data: roleRow } = await admin.from("users").select("role").eq("id", user.id).maybeSingle();
-    if (roleRow?.role !== "admin") return json({ success: false, error: "Admin only" });
+    const isAdmin = roleRow?.role === "admin";
+    let isTeamLead = false;
+    if (!isAdmin) {
+      const { data: emp } = await admin
+        .from("employees")
+        .select("is_team_lead, status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      isTeamLead = !!emp && emp.status === "active" && emp.is_team_lead === true;
+    }
+    if (!isAdmin && !isTeamLead) return json({ success: false, error: "Admin or Team Lead only" });
 
     const body = await req.json();
     const email = String(body.email ?? "").trim().toLowerCase();

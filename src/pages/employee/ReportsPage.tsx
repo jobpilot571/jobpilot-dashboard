@@ -12,6 +12,7 @@ import { Briefcase, CalendarDays, Trophy, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentEmployee } from "@/hooks/useCurrentEmployee";
 import { useMyStudents } from "@/hooks/useMyStudents";
+import { employeeSeesAllStudents } from "@/lib/employees";
 import {
   downloadCsv,
   useReportFiltersDefaults,
@@ -25,7 +26,7 @@ export default function EmployeeReportsPage() {
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
   const { data: myStudents = [] } = useMyStudents(employee?.id, {
     includeInactive: true,
-    accessAllStudents: !!employee?.can_access_all_students,
+    accessAllStudents: employeeSeesAllStudents(employee),
   });
 
   const [filters, setFilters] = useState<ReportFilters>({

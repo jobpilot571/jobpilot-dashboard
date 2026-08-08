@@ -16,10 +16,13 @@ export function EmployeeFormDialog({
   open,
   onClose,
   employee,
+  allowElevatedFlags = true,
 }: {
   open: boolean;
   onClose: () => void;
   employee?: Employee | null;
+  /** Only admins should grant Team Lead / all-students flags. */
+  allowElevatedFlags?: boolean;
 }) {
   const queryClient = useQueryClient();
   const isEdit = !!employee;
@@ -31,6 +34,7 @@ export function EmployeeFormDialog({
   const [dailyTarget, setDailyTarget] = useState(String(DEFAULT_DAILY_TARGET));
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   const [accessAllStudents, setAccessAllStudents] = useState(false);
+  const [teamLead, setTeamLead] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -41,6 +45,7 @@ export function EmployeeFormDialog({
       setJobRoleCategory(employee.job_role_category || "");
       setDailyTarget(String(employee.daily_target ?? DEFAULT_DAILY_TARGET));
       setAccessAllStudents(!!employee.can_access_all_students);
+      setTeamLead(!!employee.is_team_lead);
     } else {
       setName("");
       setEmail("");
@@ -49,6 +54,7 @@ export function EmployeeFormDialog({
       setDailyTarget(String(DEFAULT_DAILY_TARGET));
       setSendWelcomeEmail(true);
       setAccessAllStudents(false);
+      setTeamLead(false);
     }
   }, [employee, open]);
 
@@ -81,20 +87,28 @@ export function EmployeeFormDialog({
     setSaving(true);
     try {
       if (isEdit && employee) {
-        const { error } = await supabase
-          .from("employees")
-          .update({
-            name: trimmedName,
-            email: trimmedEmail,
-            role: trimmedRole,
-            job_role_category: jobRoleCategory,
-            can_access_all_students: accessAllStudents,
-          })
-          .eq("id", employee.id);
+        const patch: {
+          name: string;
+          email: string;
+          role: string;
+          job_role_category: string;
+          can_access_all_students?: boolean;
+          is_team_lead?: boolean;
+        } = {
+          name: trimmedName,
+          email: trimmedEmail,
+          role: trimmedRole,
+          job_role_category: jobRoleCategory,
+        };
+        if (allowElevatedFlags) {
+          patch.can_access_all_students = teamLead ? true : accessAllStudents;
+          patch.is_team_lead = teamLead;
+        }
+        const { error } = await supabase.from("employees").update(patch).eq("id", employee.id);
         if (error) {
-          if (isMissingColumnError(error) && accessAllStudents) {
+          if (isMissingColumnError(error) && allowElevatedFlags && (accessAllStudents || teamLead)) {
             throw new Error(
-              "All-students access column is missing. Apply migration 20260731000000_employee_all_students_access.sql first.",
+              "Access flag column is missing. Apply team-lead / all-students migrations first.",
             );
           }
           if (!isMissingColumnError(error)) throw error;
@@ -143,10 +157,13 @@ export function EmployeeFormDialog({
           .maybeSingle();
         if (created?.id) {
           await persistDailyTarget(created.id, target);
-          if (accessAllStudents) {
+          if (allowElevatedFlags && (accessAllStudents || teamLead)) {
             const { error: flagErr } = await supabase
               .from("employees")
-              .update({ can_access_all_students: true })
+              .update({
+                can_access_all_students: teamLead ? true : accessAllStudents,
+                is_team_lead: teamLead,
+              })
               .eq("id", created.id);
             if (flagErr && !isMissingColumnError(flagErr)) throw flagErr;
           }
@@ -235,20 +252,43 @@ export function EmployeeFormDialog({
           />
           <p className="text-xs text-muted-foreground">Applications expected per day for this employee.</p>
         </div>
-        <label className="flex items-start gap-2 text-sm">
-          <Checkbox
-            className="mt-0.5"
-            checked={accessAllStudents}
-            onChange={(e) => setAccessAllStudents(e.target.checked)}
-          />
-          <span>
-            <span className="font-medium">All students access</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              Can view and work on every student. Does not grant admin (no employees, settings, or free trials
-              admin).
-            </span>
-          </span>
-        </label>
+        {allowElevatedFlags ? (
+          <>
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                className="mt-0.5"
+                checked={teamLead}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setTeamLead(on);
+                  if (on) setAccessAllStudents(true);
+                }}
+              />
+              <span>
+                <span className="font-medium">Team Lead access</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Can see and operate on every student and every employee. Still not full admin (no
+                  settings / free trials admin).
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                className="mt-0.5"
+                checked={teamLead || accessAllStudents}
+                disabled={teamLead}
+                onChange={(e) => setAccessAllStudents(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">All students access</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Can view and work on every student only (no employee management). Included automatically
+                  with Team Lead.
+                </span>
+              </span>
+            </label>
+          </>
+        ) : null}
         {!isEdit ? (
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={sendWelcomeEmail} onChange={(e) => setSendWelcomeEmail(e.target.checked)} />

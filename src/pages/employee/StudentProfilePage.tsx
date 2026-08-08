@@ -17,6 +17,7 @@ import { useMyStudents } from "@/hooks/useMyStudents";
 import { useStudentById, useStudentOverviewStats } from "@/hooks/useStudentProfile";
 import { useSidebarLayout } from "@/contexts/SidebarLayoutContext";
 import { getInitials } from "@/features/employees/constants";
+import { employeeSeesAllStudents } from "@/lib/employees";
 import { getStudentBucket } from "@/lib/students";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -63,7 +64,7 @@ export default function EmployeeStudentProfilePage() {
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
   const { data: myStudents = [], isLoading: myLoading } = useMyStudents(employee?.id, {
     includeInactive: true,
-    accessAllStudents: !!employee?.can_access_all_students,
+    accessAllStudents: employeeSeesAllStudents(employee),
   });
   const assigned = useMemo(() => myStudents.some((s) => s.id === id), [myStudents, id]);
 

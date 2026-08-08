@@ -17,6 +17,8 @@ export interface Employee {
   last_active_at?: string | null;
   /** Employee can see/work on every student without becoming admin. */
   can_access_all_students?: boolean | null;
+  /** Team lead: all students + manage all employees (still not full admin). */
+  is_team_lead?: boolean | null;
 }
 
 /** Per-student daily application target (DB column or default 40). */
@@ -53,6 +55,17 @@ export function isMissingColumnError(error: { message?: string; code?: string } 
     msg.includes("joining_date") ||
     msg.includes("last_active_at") ||
     msg.includes("can_access_all_students") ||
+    msg.includes("is_team_lead") ||
     error.code === "42703" // undefined_column
   );
+}
+
+/** True when the employee can see/work on every student. */
+export function employeeSeesAllStudents(employee: Pick<Employee, "can_access_all_students" | "is_team_lead"> | null | undefined): boolean {
+  return !!(employee?.can_access_all_students || employee?.is_team_lead);
+}
+
+/** True when the employee can manage all employees (Team Lead). */
+export function employeeIsTeamLead(employee: Pick<Employee, "is_team_lead"> | null | undefined): boolean {
+  return !!employee?.is_team_lead;
 }

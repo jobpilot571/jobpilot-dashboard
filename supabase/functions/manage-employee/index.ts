@@ -35,10 +35,23 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("id", callerUser.id)
       .maybeSingle();
-    if (roleRow?.role !== "admin") return json({ error: "Admin only" });
+    const isAdmin = roleRow?.role === "admin";
+    let isTeamLead = false;
+    if (!isAdmin) {
+      const { data: emp } = await admin
+        .from("employees")
+        .select("is_team_lead, status")
+        .eq("user_id", callerUser.id)
+        .maybeSingle();
+      isTeamLead = !!emp && emp.status === "active" && emp.is_team_lead === true;
+    }
+    if (!isAdmin && !isTeamLead) return json({ error: "Admin or Team Lead only" });
 
     const body = await req.json();
     const action = String(body.action ?? "");
+
+    // Team leads cannot create admin users or grant elevated flags via this function
+    // (create_employee only creates role=employee; flags are set by admin UI).
 
     if (action === "create_employee") {
       const email = String(body.email ?? "").trim().toLowerCase();

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProgressBar } from "@/components/dashboard/ProgressBar";
 import { useAuth } from "@/contexts/AuthContext";
+import { employeeSeesAllStudents } from "@/lib/employees";
 import { useCurrentEmployee } from "@/hooks/useCurrentEmployee";
 import { useMyStudents } from "@/hooks/useMyStudents";
 import { useStudentAppStats } from "@/hooks/useStudentAppStats";
@@ -16,7 +17,7 @@ import { getStudentBucket } from "@/lib/students";
 export default function EmployeeStudentsPage() {
   const { user } = useAuth();
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
-  const accessAll = !!employee?.can_access_all_students;
+  const accessAll = employeeSeesAllStudents(employee);
   const { data: students = [], isLoading } = useMyStudents(employee?.id, {
     includeInactive: true,
     accessAllStudents: accessAll,

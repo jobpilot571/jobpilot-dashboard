@@ -20,6 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentEmployee } from "@/hooks/useCurrentEmployee";
 import { useMyStudents } from "@/hooks/useMyStudents";
 import { useEmployeeWorkspaceStats } from "@/hooks/useEmployeeWorkspaceStats";
+import { employeeSeesAllStudents } from "@/lib/employees";
 import { formatHoursMinutes, statusLabel, INACTIVITY_ALERT_MIN } from "@/lib/consistency";
 import { formatTimeCST } from "@/lib/timezone";
 
@@ -28,7 +29,7 @@ export default function EmployeeDashboardPage() {
   const { data: employee, isLoading: empLoading, isError: empError, error: empErr, refetch: refetchEmp } =
     useCurrentEmployee();
   const { data: students = [], isLoading: stuLoading } = useMyStudents(employee?.id, {
-    accessAllStudents: !!employee?.can_access_all_students,
+    accessAllStudents: employeeSeesAllStudents(employee),
   });
   const { data: stats, isLoading: statsLoading, refetch, isFetching } = useEmployeeWorkspaceStats(
     employee,

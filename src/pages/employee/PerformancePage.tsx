@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentEmployee } from "@/hooks/useCurrentEmployee";
 import { useMyStudents } from "@/hooks/useMyStudents";
 import { useEmployeeWorkspaceStats } from "@/hooks/useEmployeeWorkspaceStats";
+import { employeeSeesAllStudents } from "@/lib/employees";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -37,7 +38,7 @@ export default function EmployeePerformancePage() {
   const { user } = useAuth();
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
   const { data: students = [] } = useMyStudents(employee?.id, {
-    accessAllStudents: !!employee?.can_access_all_students,
+    accessAllStudents: employeeSeesAllStudents(employee),
   });
   const { data: stats, isLoading } = useEmployeeWorkspaceStats(employee, students);
   const today = getTodayCST();

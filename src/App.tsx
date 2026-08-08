@@ -23,6 +23,7 @@ import EmployeeHistoryPage from "@/pages/employee/HistoryPage";
 import EmployeePerformancePage from "@/pages/employee/PerformancePage";
 import EmployeeReportsPage from "@/pages/employee/ReportsPage";
 import EmployeeProfilePage from "@/pages/employee/ProfilePage";
+import EmployeeEmployeesPage from "@/pages/employee/EmployeesPage";
 import StudentDashboardPage from "@/pages/student/DashboardPage";
 import StudentProgressPage from "@/pages/student/ProgressPage";
 import StudentHistoryPage from "@/pages/student/HistoryPage";
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="/app" element={<ProtectedRoute allowedRole="employee"><EmployeeDashboardPage /></ProtectedRoute>} />
             <Route path="/app/students" element={<ProtectedRoute allowedRole="employee"><EmployeeStudentsPage /></ProtectedRoute>} />
             <Route path="/app/students/:id" element={<ProtectedRoute allowedRole="employee"><EmployeeStudentProfilePage /></ProtectedRoute>} />
+            <Route path="/app/employees" element={<ProtectedRoute allowedRole="employee"><EmployeeEmployeesPage /></ProtectedRoute>} />
             <Route path="/app/applications" element={<ProtectedRoute allowedRole="employee"><EmployeeApplicationsPage /></ProtectedRoute>} />
             <Route path="/app/history" element={<ProtectedRoute allowedRole="employee"><EmployeeHistoryPage /></ProtectedRoute>} />
             <Route path="/app/performance" element={<ProtectedRoute allowedRole="employee"><EmployeePerformancePage /></ProtectedRoute>} />

@@ -38,8 +38,14 @@ import {
 } from "@/features/employees/constants";
 import { cn } from "@/lib/utils";
 
-export default function AdminEmployeesPage() {
+export default function AdminEmployeesPage({
+  portal = "admin",
+}: {
+  portal?: "admin" | "employee";
+}) {
   const queryClient = useQueryClient();
+  const shellRole = portal === "admin" ? "admin" : "employee";
+  const allowElevatedFlags = portal === "admin";
   const { data: employees = [], isLoading, isError, error, refetch } = useEmployees();
   const { data: students = [] } = useStudents();
   const { data: appsTodayData } = useEmployeeAppsToday();
@@ -228,13 +234,15 @@ export default function AdminEmployeesPage() {
   };
 
   return (
-    <AppShell role="admin">
+    <AppShell role={shellRole}>
       <div className="mx-auto max-w-7xl space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight">Employees</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage counselors, daily targets, assignments, and credentials.
+              {portal === "employee"
+                ? "Team Lead: view and manage counselors, targets, and credentials."
+                : "Manage counselors, daily targets, assignments, and credentials."}
             </p>
           </div>
           <Button
@@ -372,23 +380,32 @@ export default function AdminEmployeesPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <Badge
-                          className={
-                            emp.status === "inactive"
-                              ? "border-destructive/30 bg-destructive/10 text-destructive"
-                              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-                          }
-                        >
-                          {emp.status === "inactive" ? (
-                            <>
-                              <UserX className="h-3 w-3" /> Inactive
-                            </>
-                          ) : (
-                            <>
-                              <Check className="h-3 w-3" /> Active
-                            </>
-                          )}
-                        </Badge>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge
+                            className={
+                              emp.status === "inactive"
+                                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                            }
+                          >
+                            {emp.status === "inactive" ? (
+                              <>
+                                <UserX className="h-3 w-3" /> Inactive
+                              </>
+                            ) : (
+                              <>
+                                <Check className="h-3 w-3" /> Active
+                              </>
+                            )}
+                          </Badge>
+                          {emp.is_team_lead ? (
+                            <Badge className="border-sky-500/30 bg-sky-500/10 text-sky-800">Team Lead</Badge>
+                          ) : emp.can_access_all_students ? (
+                            <Badge className="border-violet-500/30 bg-violet-500/10 text-violet-800">
+                              All students
+                            </Badge>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <EmailStatusBadge log={log} />
@@ -492,6 +509,7 @@ export default function AdminEmployeesPage() {
       <EmployeeFormDialog
         open={formOpen}
         employee={editing}
+        allowElevatedFlags={allowElevatedFlags}
         onClose={() => {
           setFormOpen(false);
           setEditing(null);

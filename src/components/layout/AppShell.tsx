@@ -27,6 +27,8 @@ import {
   SidebarLayoutProvider,
   useSidebarLayout,
 } from "@/contexts/SidebarLayoutContext";
+import { useCurrentEmployee } from "@/hooks/useCurrentEmployee";
+import { employeeIsTeamLead } from "@/lib/employees";
 import { cn } from "@/lib/utils";
 import type { AppRole } from "@/lib/constants";
 import { formatInTimeZone } from "date-fns-tz";
@@ -44,7 +46,7 @@ const adminNav: NavItem[] = [
   { title: "Settings", to: "/admin/settings", icon: User },
 ];
 
-const employeeNav: NavItem[] = [
+const employeeNavBase: NavItem[] = [
   { title: "Dashboard", to: "/app", icon: LayoutDashboard, end: true },
   { title: "Students", to: "/app/students", icon: GraduationCap },
   { title: "Applications", to: "/app/applications", icon: Briefcase },
@@ -68,9 +70,16 @@ const panelLabel: Record<AppRole, string> = {
   student: "Student Portal",
 };
 
-function navFor(role: AppRole): NavItem[] {
+function navFor(role: AppRole, opts?: { teamLead?: boolean }): NavItem[] {
   if (role === "admin") return adminNav;
-  if (role === "employee") return employeeNav;
+  if (role === "employee") {
+    if (!opts?.teamLead) return employeeNavBase;
+    // Insert Employees after Students
+    const items = [...employeeNavBase];
+    const studentsIdx = items.findIndex((i) => i.to === "/app/students");
+    items.splice(studentsIdx + 1, 0, { title: "Employees", to: "/app/employees", icon: Users });
+    return items;
+  }
   return studentNav;
 }
 
@@ -152,7 +161,9 @@ function AppShellInner({
   children: ReactNode;
 }) {
   const location = useLocation();
-  const items = navFor(role);
+  const { data: currentEmployee } = useCurrentEmployee();
+  const teamLead = role === "employee" && employeeIsTeamLead(currentEmployee);
+  const items = navFor(role, { teamLead });
   const [mobileOpen, setMobileOpen] = useState(false);
   const {
     setSidebarOpen,

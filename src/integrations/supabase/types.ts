@@ -274,6 +274,7 @@ export type Database = {
           daily_target: number
           email: string
           id: string
+          is_team_lead: boolean
           job_role_category: string
           joining_date: string | null
           last_active_at: string | null
@@ -290,6 +291,7 @@ export type Database = {
           daily_target?: number
           email: string
           id?: string
+          is_team_lead?: boolean
           job_role_category?: string
           joining_date?: string | null
           last_active_at?: string | null
@@ -306,6 +308,7 @@ export type Database = {
           daily_target?: number
           email?: string
           id?: string
+          is_team_lead?: boolean
           job_role_category?: string
           joining_date?: string | null
           last_active_at?: string | null

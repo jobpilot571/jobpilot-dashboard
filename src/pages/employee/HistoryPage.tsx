@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentEmployee } from "@/hooks/useCurrentEmployee";
 import { useMyStudents } from "@/hooks/useMyStudents";
 import { useMyApplicationsHistory } from "@/hooks/useJobApplications";
+import { employeeSeesAllStudents } from "@/lib/employees";
 import { getTodayCST } from "@/lib/timezone";
 import { downloadCsv } from "@/hooks/useReportsData";
 
@@ -30,7 +31,7 @@ export default function EmployeeHistoryPage() {
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
   const { data: students = [] } = useMyStudents(employee?.id, {
     includeInactive: true,
-    accessAllStudents: !!employee?.can_access_all_students,
+    accessAllStudents: employeeSeesAllStudents(employee),
   });
   const studentIds = students.map((s) => s.id);
   const nameById = useMemo(

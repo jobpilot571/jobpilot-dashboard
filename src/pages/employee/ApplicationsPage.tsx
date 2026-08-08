@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSidebarLayout } from "@/contexts/SidebarLayoutContext";
 import { useCurrentEmployee } from "@/hooks/useCurrentEmployee";
 import { useMyStudents } from "@/hooks/useMyStudents";
+import { employeeSeesAllStudents } from "@/lib/employees";
 
 function CloseSidebarForApps() {
   const { setForceSidebarClosed } = useSidebarLayout();
@@ -25,7 +26,7 @@ export default function EmployeeApplicationsPage() {
   const [params, setParams] = useSearchParams();
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
   const { data: students = [], isLoading: stuLoading } = useMyStudents(employee?.id, {
-    accessAllStudents: !!employee?.can_access_all_students,
+    accessAllStudents: employeeSeesAllStudents(employee),
   });
 
   const studentId = params.get("student") ?? "";
