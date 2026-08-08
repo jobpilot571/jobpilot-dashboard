@@ -22,6 +22,17 @@ export const PAYMENT_STATUSES = ["unpaid", "partial", "paid", "waived", "n/a"] a
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export const DEFAULT_PAYMENT_STATUS: PaymentStatus = "unpaid";
 
+export const PAYMENT_METHODS = [
+  "Bank transfer",
+  "Zelle",
+  "Cash",
+  "Card",
+  "Check",
+  "PayPal",
+  "Venmo",
+  "Other",
+] as const;
+
 /** Default daily application target when employee.daily_target is null (pre-migration). */
 export const DEFAULT_DAILY_TARGET = 40;
 

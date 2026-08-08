@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   Briefcase,
+  DollarSign,
   FileText,
   FolderOpen,
   Forward,
@@ -41,6 +42,7 @@ const adminNav: NavItem[] = [
   { title: "Dashboard", to: "/admin", icon: LayoutDashboard, end: true },
   { title: "Employees", to: "/admin/employees", icon: Users },
   { title: "Students", to: "/admin/students", icon: GraduationCap },
+  { title: "Payments", to: "/admin/payments", icon: DollarSign },
   { title: "Placement", to: "/admin/placement", icon: Target },
   { title: "Free Trials", to: "/admin/free-trials", icon: Sparkles },
   { title: "Reports", to: "/admin/reports", icon: BarChart3 },

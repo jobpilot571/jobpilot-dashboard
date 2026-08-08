@@ -13,6 +13,7 @@ import AdminStudentsPage from "@/pages/admin/StudentsPage";
 import AdminStudentProfilePage from "@/pages/admin/StudentProfilePage";
 import AdminPlacementPage from "@/pages/admin/PlacementPage";
 import AdminFreeTrialsPage from "@/pages/admin/FreeTrialsPage";
+import AdminPaymentsPage from "@/pages/admin/PaymentsPage";
 import AdminReportsPage from "@/pages/admin/ReportsPage";
 import AdminSettingsPage from "@/pages/admin/SettingsPage";
 import EmployeeDashboardPage from "@/pages/employee/DashboardPage";
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/admin/employees" element={<ProtectedRoute allowedRole="admin"><AdminEmployeesPage /></ProtectedRoute>} />
             <Route path="/admin/students" element={<ProtectedRoute allowedRole="admin"><AdminStudentsPage /></ProtectedRoute>} />
             <Route path="/admin/students/:id" element={<ProtectedRoute allowedRole="admin"><AdminStudentProfilePage /></ProtectedRoute>} />
+            <Route path="/admin/payments" element={<ProtectedRoute allowedRole="admin"><AdminPaymentsPage /></ProtectedRoute>} />
             <Route path="/admin/placement" element={<ProtectedRoute allowedRole="admin"><AdminPlacementPage /></ProtectedRoute>} />
             <Route path="/admin/free-trials" element={<ProtectedRoute allowedRole="admin"><AdminFreeTrialsPage /></ProtectedRoute>} />
             <Route path="/admin/reports" element={<ProtectedRoute allowedRole="admin"><AdminReportsPage /></ProtectedRoute>} />
