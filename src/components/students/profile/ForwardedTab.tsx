@@ -50,9 +50,14 @@ const STAGE_TONE: Record<ForwardStageKey, string> = {
 export function StudentForwardedTab({
   studentId,
   employeeId,
+  canDelete = true,
+  canAdd = true,
 }: {
   studentId: string;
   employeeId?: string | null;
+  /** Employees/admins can delete; students cannot. */
+  canDelete?: boolean;
+  canAdd?: boolean;
 }) {
   const { data: events = [], isLoading } = useStudentPipelineEvents(studentId);
   const { data: apps = [] } = useJobApplications(studentId);
@@ -61,7 +66,7 @@ export function StudentForwardedTab({
   const uploadShot = useUploadPipelineScreenshot();
   const [filter, setFilter] = useState<"all" | ForwardStageKey>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(true);
+  const [formOpen, setFormOpen] = useState(canAdd);
 
   const [stage, setStage] = useState<ForwardStageKey>("screening");
   const [link, setLink] = useState("");
@@ -200,10 +205,12 @@ export function StudentForwardedTab({
           <h3 className="font-display text-lg font-semibold">Forwarded</h3>
           <Badge className="border-border bg-muted text-muted-foreground">{events.length} total</Badge>
         </div>
-        <Button type="button" size="sm" onClick={() => setFormOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          Add forwarded
-        </Button>
+        {canAdd ? (
+          <Button type="button" size="sm" onClick={() => setFormOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Add forwarded
+          </Button>
+        ) : null}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -223,7 +230,7 @@ export function StudentForwardedTab({
         ))}
       </div>
 
-      {formOpen ? (
+      {canAdd && formOpen ? (
         <Card className="border-primary/30 bg-sky-50/40">
           <CardHeader className="pb-2">
             <CardTitle className="font-display text-base">Add forwarded application</CardTitle>
@@ -368,10 +375,16 @@ export function StudentForwardedTab({
           ) : rows.length === 0 ? (
             <div className="space-y-3 px-2 py-8 text-center">
               <p className="text-sm text-muted-foreground">
-                No forwarded rows in this stage yet. Use <strong>Add forwarded</strong> above to submit an
-                application link, date, and screenshot.
+                No forwarded rows in this stage yet.
+                {canAdd ? (
+                  <>
+                    {" "}
+                    Use <strong>Add forwarded</strong> above to submit an application link, date, and
+                    screenshot.
+                  </>
+                ) : null}
               </p>
-              {!formOpen ? (
+              {canAdd && !formOpen ? (
                 <Button type="button" size="sm" onClick={() => setFormOpen(true)}>
                   <Plus className="h-3.5 w-3.5" />
                   Add forwarded
@@ -404,6 +417,7 @@ export function StudentForwardedTab({
                   }}
                   uploadingShot={uploadShot.isPending}
                   onAdvance={(next) => void advanceToRound(e, next)}
+                  canDelete={canDelete}
                   onDelete={() => {
                     if (confirm("Delete this forwarded event?")) remove.mutate(e.id);
                   }}
@@ -428,6 +442,7 @@ function ForwardExpandableRow({
   onUploadScreenshot,
   uploadingShot,
   onAdvance,
+  canDelete,
   onDelete,
 }: {
   event: PipelineEvent;
@@ -440,6 +455,7 @@ function ForwardExpandableRow({
   onUploadScreenshot: (file: File) => void;
   uploadingShot: boolean;
   onAdvance: (stage: ForwardStageKey) => void;
+  canDelete: boolean;
   onDelete: () => void;
 }) {
   const stage = event.stage as ForwardStageKey;
@@ -661,9 +677,13 @@ function ForwardExpandableRow({
           )}
 
           <div className="flex justify-end border-t border-border pt-3">
-            <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
-              <Trash2 className="h-3.5 w-3.5" /> Delete this row
-            </Button>
+            {canDelete ? (
+              <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
+                <Trash2 className="h-3.5 w-3.5" /> Delete this row
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">Only your counselor or admin can delete forwarded rows.</p>
+            )}
           </div>
         </div>
       ) : null}

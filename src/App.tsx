@@ -27,6 +27,7 @@ import EmployeeEmployeesPage from "@/pages/employee/EmployeesPage";
 import StudentDashboardPage from "@/pages/student/DashboardPage";
 import StudentProgressPage from "@/pages/student/ProgressPage";
 import StudentHistoryPage from "@/pages/student/HistoryPage";
+import StudentForwardedPage from "@/pages/student/ForwardedPage";
 import StudentProfilePage from "@/pages/student/ProfilePage";
 import StudentDocumentsPage from "@/pages/student/DocumentsPage";
 
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="/me" element={<ProtectedRoute allowedRole="student"><StudentDashboardPage /></ProtectedRoute>} />
             <Route path="/me/progress" element={<ProtectedRoute allowedRole="student"><StudentProgressPage /></ProtectedRoute>} />
             <Route path="/me/history" element={<ProtectedRoute allowedRole="student"><StudentHistoryPage /></ProtectedRoute>} />
+            <Route path="/me/forwarded" element={<ProtectedRoute allowedRole="student"><StudentForwardedPage /></ProtectedRoute>} />
             <Route path="/me/profile" element={<ProtectedRoute allowedRole="student"><StudentProfilePage /></ProtectedRoute>} />
             <Route path="/me/documents" element={<ProtectedRoute allowedRole="student"><StudentDocumentsPage /></ProtectedRoute>} />
 

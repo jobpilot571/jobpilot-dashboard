@@ -45,6 +45,7 @@ import {
   APPLICATION_SOURCES,
   DEFAULT_APPLICATION_SOURCE,
   detectApplicationSource,
+  emptySourceCounts,
   isApplicationSource,
   type ApplicationSource,
 } from "@/lib/applicationSources";
@@ -91,29 +92,18 @@ export function StudentJobApplicationsTab({
     [apps, source],
   );
 
-  const sourceCounts = useMemo(() => {
-    const map: Record<ApplicationSource, number> = {
-      career_sites: 0,
-      jobright: 0,
-      dice: 0,
-      linkedin: 0,
-    };
-    for (const a of apps) map[appSource(a)] += 1;
-    return map;
-  }, [apps]);
-
   const todaySourceCounts = useMemo(() => {
-    const map: Record<ApplicationSource, number> = {
-      career_sites: 0,
-      jobright: 0,
-      dice: 0,
-      linkedin: 0,
-    };
+    const map = emptySourceCounts();
     for (const a of apps) {
       if (a.applied_date === today) map[appSource(a)] += 1;
     }
     return map;
   }, [apps, today]);
+
+  const todayTotal = useMemo(
+    () => APPLICATION_SOURCES.reduce((sum, s) => sum + todaySourceCounts[s.value], 0),
+    [todaySourceCounts],
+  );
 
   const todayApps = useMemo(() => {
     const list = sectionApps.filter((a) => a.applied_date === today);
@@ -286,35 +276,39 @@ export function StudentJobApplicationsTab({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1 shadow-sm">
-        {APPLICATION_SOURCES.map((s) => (
-          <button
-            key={s.value}
-            type="button"
-            onClick={() => {
-              setSource(s.value);
-              setExpandedHistoryKey(null);
-              setDraftOpen(true);
-            }}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition",
-              source === s.value
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            {s.label}
-            <span
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-1.5 shadow-sm">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+          {APPLICATION_SOURCES.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              onClick={() => {
+                setSource(s.value);
+                setExpandedHistoryKey(null);
+                setDraftOpen(true);
+              }}
               className={cn(
-                "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-                source === s.value ? "bg-white/20" : "bg-muted text-muted-foreground",
+                "inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition",
+                source === s.value
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
-              {todaySourceCounts[s.value]}
-              <span className="opacity-70">/{sourceCounts[s.value]}</span>
-            </span>
-          </button>
-        ))}
+              {s.label}
+              <span
+                className={cn(
+                  "rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+                  source === s.value ? "bg-white/20" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {todaySourceCounts[s.value]}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto shrink-0 rounded-lg bg-muted/80 px-3 py-2 text-sm font-semibold tabular-nums text-foreground">
+          Total = {todayTotal}
+        </div>
       </div>
 
       <section className="space-y-4">

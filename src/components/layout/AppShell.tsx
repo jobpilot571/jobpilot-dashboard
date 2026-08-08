@@ -3,7 +3,12 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
+  Briefcase,
+  FileText,
+  FolderOpen,
+  Forward,
   GraduationCap,
+  History,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -14,10 +19,6 @@ import {
   Target,
   User,
   Users,
-  Briefcase,
-  History,
-  FileText,
-  FolderOpen,
   X,
 } from "lucide-react";
 import { UserMenu } from "@/components/layout/UserMenu";
@@ -60,6 +61,7 @@ const studentNav: NavItem[] = [
   { title: "Dashboard", to: "/me", icon: LayoutDashboard, end: true },
   { title: "Progress", to: "/me/progress", icon: Target },
   { title: "History", to: "/me/history", icon: History },
+  { title: "Forwarded", to: "/me/forwarded", icon: Forward },
   { title: "Profile", to: "/me/profile", icon: User },
   { title: "Documents", to: "/me/documents", icon: FolderOpen },
 ];

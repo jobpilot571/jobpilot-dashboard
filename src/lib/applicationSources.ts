@@ -3,11 +3,22 @@ export const APPLICATION_SOURCES = [
   { value: "jobright", label: "Jobright.ai" },
   { value: "dice", label: "Dice" },
   { value: "linkedin", label: "LinkedIn" },
+  { value: "other", label: "Other" },
 ] as const;
 
 export type ApplicationSource = (typeof APPLICATION_SOURCES)[number]["value"];
 
 export const DEFAULT_APPLICATION_SOURCE: ApplicationSource = "career_sites";
+
+export function emptySourceCounts(): Record<ApplicationSource, number> {
+  return {
+    career_sites: 0,
+    jobright: 0,
+    dice: 0,
+    linkedin: 0,
+    other: 0,
+  };
+}
 
 export function isApplicationSource(value: string | null | undefined): value is ApplicationSource {
   return APPLICATION_SOURCES.some((s) => s.value === value);
