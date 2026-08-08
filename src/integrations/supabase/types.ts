@@ -374,6 +374,7 @@ export type Database = {
       }
       job_applications: {
         Row: {
+          application_source: string
           applied_at: string
           applied_date: string
           applied_link: string
@@ -389,6 +390,7 @@ export type Database = {
           student_id: string
         }
         Insert: {
+          application_source?: string
           applied_at?: string
           applied_date?: string
           applied_link?: string
@@ -404,6 +406,7 @@ export type Database = {
           student_id: string
         }
         Update: {
+          application_source?: string
           applied_at?: string
           applied_date?: string
           applied_link?: string

@@ -2,6 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getNowCST } from "@/lib/timezone";
+import {
+  DEFAULT_APPLICATION_SOURCE,
+  isApplicationSource,
+  type ApplicationSource,
+} from "@/lib/applicationSources";
 
 export interface JobApplication {
   id: string;
@@ -17,6 +22,7 @@ export interface JobApplication {
   status: string;
   created_by_employee_id: string | null;
   created_at: string;
+  application_source?: ApplicationSource | string;
 }
 
 export const APP_STATUSES = [
@@ -120,25 +126,32 @@ export function useAddJobApplication(studentId: string | undefined) {
       created_by_employee_id?: string | null;
       applied_date?: string;
       applied_time?: string;
+      application_source?: ApplicationSource | string;
     }) => {
       if (!studentId) throw new Error("Select a student first.");
       const now = getNowCST();
       const serial_no = await nextSerialNo(studentId);
-      const { data, error } = await supabase
-        .from("job_applications")
-        .insert({
-          student_id: studentId,
-          serial_no,
-          applied_date: input.applied_date ?? now.date,
-          applied_time: input.applied_time ?? now.time,
-          applied_link: input.applied_link,
-          job_role: input.job_role,
-          company_name: input.company_name,
-          created_by_employee_id: input.created_by_employee_id ?? null,
-          status: input.status,
-        })
-        .select()
-        .single();
+      const source = isApplicationSource(input.application_source)
+        ? input.application_source
+        : DEFAULT_APPLICATION_SOURCE;
+      const baseRow = {
+        student_id: studentId,
+        serial_no,
+        applied_date: input.applied_date ?? now.date,
+        applied_time: input.applied_time ?? now.time,
+        applied_link: input.applied_link,
+        job_role: input.job_role,
+        company_name: input.company_name,
+        created_by_employee_id: input.created_by_employee_id ?? null,
+        status: input.status,
+      };
+      const withSource = { ...baseRow, application_source: source };
+      let { data, error } = await supabase.from("job_applications").insert(withSource).select().single();
+      if (error && /application_source/i.test(error.message)) {
+        const fallback = await supabase.from("job_applications").insert(baseRow).select().single();
+        data = fallback.data;
+        error = fallback.error;
+      }
       if (error) throw error;
       return data as JobApplication;
     },
@@ -163,7 +176,10 @@ export function useUpdateJobApplication(studentId: string | undefined) {
     mutationFn: async (input: {
       id: string;
       updates: Partial<
-        Pick<JobApplication, "applied_link" | "job_role" | "company_name" | "status" | "resume_file_url">
+        Pick<
+          JobApplication,
+          "applied_link" | "job_role" | "company_name" | "status" | "resume_file_url" | "application_source"
+        >
       >;
     }) => {
       const { error } = await supabase.from("job_applications").update(input.updates).eq("id", input.id);

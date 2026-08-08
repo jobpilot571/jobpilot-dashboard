@@ -41,8 +41,21 @@ import {
 import { autofillFromJobLink, JOB_LINK_GUIDANCE } from "@/lib/jobLinkAutofill";
 import { enrichJobLinkWithAi } from "@/lib/parseJobLinkAi";
 import { groupAppHistory, type HistoryBucket } from "@/lib/appHistoryGroups";
+import {
+  APPLICATION_SOURCES,
+  DEFAULT_APPLICATION_SOURCE,
+  detectApplicationSource,
+  isApplicationSource,
+  type ApplicationSource,
+} from "@/lib/applicationSources";
 import { getNowCST, getTodayCST, formatTimeCST } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
+
+function appSource(app: JobApplication): ApplicationSource {
+  return isApplicationSource(app.application_source)
+    ? app.application_source
+    : DEFAULT_APPLICATION_SOURCE;
+}
 
 export function StudentJobApplicationsTab({
   studentId,
@@ -61,6 +74,7 @@ export function StudentJobApplicationsTab({
   const uploadResume = useUploadApplicationResume(studentId);
   const upsertPipeline = useUpsertPipelineEvent();
 
+  const [source, setSource] = useState<ApplicationSource>(DEFAULT_APPLICATION_SOURCE);
   const [draftOpen, setDraftOpen] = useState(true);
   const [link, setLink] = useState("");
   const [role, setRole] = useState("");
@@ -72,22 +86,51 @@ export function StudentJobApplicationsTab({
   const [historyBucket, setHistoryBucket] = useState<HistoryBucket>("daily");
   const [expandedHistoryKey, setExpandedHistoryKey] = useState<string | null>(null);
 
+  const sectionApps = useMemo(
+    () => apps.filter((a) => appSource(a) === source),
+    [apps, source],
+  );
+
+  const sourceCounts = useMemo(() => {
+    const map: Record<ApplicationSource, number> = {
+      career_sites: 0,
+      jobright: 0,
+      dice: 0,
+      linkedin: 0,
+    };
+    for (const a of apps) map[appSource(a)] += 1;
+    return map;
+  }, [apps]);
+
+  const todaySourceCounts = useMemo(() => {
+    const map: Record<ApplicationSource, number> = {
+      career_sites: 0,
+      jobright: 0,
+      dice: 0,
+      linkedin: 0,
+    };
+    for (const a of apps) {
+      if (a.applied_date === today) map[appSource(a)] += 1;
+    }
+    return map;
+  }, [apps, today]);
+
   const todayApps = useMemo(() => {
-    const list = apps.filter((a) => a.applied_date === today);
+    const list = sectionApps.filter((a) => a.applied_date === today);
     return [...list].sort((a, b) => {
       if (b.serial_no !== a.serial_no) return b.serial_no - a.serial_no;
       return new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime();
     });
-  }, [apps, today]);
+  }, [sectionApps, today]);
 
   const historyGroups = useMemo(
-    () => groupAppHistory(apps, historyBucket, today),
-    [apps, historyBucket, today],
+    () => groupAppHistory(sectionApps, historyBucket, today),
+    [sectionApps, historyBucket, today],
   );
 
   const pastCount = useMemo(
-    () => apps.filter((a) => a.applied_date !== today).length,
-    [apps, today],
+    () => sectionApps.filter((a) => a.applied_date !== today).length,
+    [sectionApps, today],
   );
 
   const todayCount = todayApps.length;
@@ -113,8 +156,14 @@ export function StudentJobApplicationsTab({
   const runAutofill = async (raw: string, opts?: { forceAi?: boolean }) => {
     const url = raw.trim();
     if (!url) return;
+    const detected = detectApplicationSource(url, source);
+    const switched = detected !== source;
+    if (switched) setSource(detected);
     setAutofilling(true);
     setAutofillNote(null);
+    const sectionNote = switched
+      ? `Switched to ${APPLICATION_SOURCES.find((s) => s.value === detected)?.label}. `
+      : "";
     try {
       const local = autofillFromJobLink(url);
       if (local.company) setCompany(local.company);
@@ -131,30 +180,31 @@ export function StudentJobApplicationsTab({
 
       if (needDeep) {
         const enriched = await enrichJobLinkWithAi(url);
-          if (enriched) {
+        if (enriched) {
           if (enriched.company) setCompany(enriched.company);
           if (enriched.jobRole) setRole(enriched.jobRole);
           if (enriched.jobRole) {
             setAutofillNote(
-              enriched.source === "page"
-                ? "Filled from job posting page."
-                : enriched.source === "ai"
-                  ? "Filled via AI link parse."
-                  : "Filled from URL.",
+              sectionNote +
+                (enriched.source === "page"
+                  ? "Filled from job posting page."
+                  : enriched.source === "ai"
+                    ? "Filled via AI link parse."
+                    : "Filled from URL."),
             );
           } else if (enriched.company) {
             setAutofillNote(
-              `Company: ${enriched.company}. Job role isn’t in this URL (often login-gated) — type it manually.`,
+              `${sectionNote}Company: ${enriched.company}. Job role isn’t in this URL (often login-gated) — type it manually.`,
             );
           } else {
-            setAutofillNote("Could not autofill — enter company & role manually.");
+            setAutofillNote(`${sectionNote}Could not autofill — enter company & role manually.`);
           }
         } else {
-          setAutofillNote("Could not autofill role — enter company & role manually.");
+          setAutofillNote(`${sectionNote}Could not autofill role — enter company & role manually.`);
         }
         if (local.warnings[0]) toast.message(local.warnings[0]);
       } else {
-        setAutofillNote("Filled from URL.");
+        setAutofillNote(sectionNote ? `${sectionNote}Filled from URL.` : "Filled from URL.");
       }
     } finally {
       setAutofilling(false);
@@ -207,6 +257,7 @@ export function StudentJobApplicationsTab({
         created_by_employee_id: employeeId ?? null,
         applied_date: now.date,
         applied_time: now.time,
+        application_source: detectApplicationSource(link, source),
       },
       {
         onSuccess: async (created) => {
@@ -224,6 +275,9 @@ export function StudentJobApplicationsTab({
     );
   };
 
+  const activeSourceLabel =
+    APPLICATION_SOURCES.find((s) => s.value === source)?.label ?? "Career sites";
+
   return (
     <div className="space-y-8">
       {isError ? (
@@ -232,11 +286,44 @@ export function StudentJobApplicationsTab({
         </div>
       ) : null}
 
+      <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1 shadow-sm">
+        {APPLICATION_SOURCES.map((s) => (
+          <button
+            key={s.value}
+            type="button"
+            onClick={() => {
+              setSource(s.value);
+              setExpandedHistoryKey(null);
+              setDraftOpen(true);
+            }}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition",
+              source === s.value
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            {s.label}
+            <span
+              className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+                source === s.value ? "bg-white/20" : "bg-muted text-muted-foreground",
+              )}
+            >
+              {todaySourceCounts[s.value]}
+              <span className="opacity-70">/{sourceCounts[s.value]}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <CalendarDays className="h-4 w-4 text-primary" />
-            <h3 className="font-display text-lg font-semibold">Today&apos;s Applications</h3>
+            <h3 className="font-display text-lg font-semibold">
+              Today&apos;s Applications · {activeSourceLabel}
+            </h3>
             <Badge className="border-border bg-muted text-muted-foreground">{todayCount} saved</Badge>
           </div>
           <Button type="button" size="sm" variant="outline" onClick={() => setDraftOpen(true)}>
@@ -245,7 +332,10 @@ export function StudentJobApplicationsTab({
           </Button>
         </div>
 
-        <p className="text-xs text-muted-foreground">{JOB_LINK_GUIDANCE}</p>
+        <p className="text-xs text-muted-foreground">
+          Log {activeSourceLabel} links here. Paste a URL to autofill; LinkedIn / Dice / Jobright links switch
+          section automatically. {JOB_LINK_GUIDANCE}
+        </p>
 
         <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
           <table className="w-full min-w-[1080px] text-left text-sm">
@@ -387,7 +477,7 @@ export function StudentJobApplicationsTab({
               {!isLoading && todayApps.length === 0 && !draftOpen ? (
                 <tr>
                   <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">
-                    No applications logged today. Click Add Row, or open history below for older links.
+                    No {activeSourceLabel} applications logged today. Click Add Row, or open history below.
                   </td>
                 </tr>
               ) : null}
@@ -398,7 +488,9 @@ export function StudentJobApplicationsTab({
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-display text-lg font-semibold">Job Applications History</h3>
+          <h3 className="font-display text-lg font-semibold">
+            Job Applications History · {activeSourceLabel}
+          </h3>
           <Badge className="border-border bg-muted text-muted-foreground">{pastCount} past</Badge>
         </div>
         <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1 shadow-sm">
@@ -437,7 +529,7 @@ export function StudentJobApplicationsTab({
             </div>
           ) : historyGroups.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-              No previous applications yet.
+              No previous {activeSourceLabel} applications yet.
             </p>
           ) : (
             historyGroups.map((g) => {
