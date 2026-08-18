@@ -19,7 +19,7 @@ export default function EmployeeStudentsPage() {
   const { data: employee, isLoading: empLoading } = useCurrentEmployee();
   const accessAll = employeeSeesAllStudents(employee);
   const { data: students = [], isLoading } = useMyStudents(employee?.id, {
-    includeInactive: true,
+    includeInactive: !accessAll,
     accessAllStudents: accessAll,
   });
   const { data: appStats = {} } = useStudentAppStats(students.map((s) => s.id));
@@ -28,6 +28,8 @@ export default function EmployeeStudentsPage() {
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return students.filter((s) => {
+      // Team leads / all-students access: operational list is active (assigned) only.
+      if (accessAll && getStudentBucket(s) !== "assigned") return false;
       if (!q) return true;
       return (
         s.name.toLowerCase().includes(q) ||
@@ -35,7 +37,7 @@ export default function EmployeeStudentsPage() {
         (s.program || "").toLowerCase().includes(q)
       );
     });
-  }, [students, search]);
+  }, [students, search, accessAll]);
 
   if (!empLoading && !employee) {
     return <NoEmployeeProfile email={user?.email} />;
@@ -49,9 +51,7 @@ export default function EmployeeStudentsPage() {
             {accessAll ? "All students" : "My students"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {accessAll
-              ? "You can view and work on every student (employee access)."
-              : "Students assigned to you."}
+            {accessAll ? "Active assigned students across the team." : "Students assigned to you."}
           </p>
         </div>
 
@@ -133,7 +133,9 @@ export default function EmployeeStudentsPage() {
               {!isLoading && rows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
-                    No assigned students match your search.
+                    {accessAll
+                      ? "No active students match your search."
+                      : "No assigned students match your search."}
                   </td>
                 </tr>
               ) : null}
