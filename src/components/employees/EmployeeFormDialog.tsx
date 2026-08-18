@@ -58,8 +58,29 @@ export function EmployeeFormDialog({
     }
   }, [employee, open]);
 
+  // Access flags live on columns the list query used to drop when daily_target
+  // (etc.) was missing. Re-read them directly so Edit shows the saved state.
+  useEffect(() => {
+    if (!open || !employee?.id) return;
+    let cancelled = false;
+    void supabase
+      .from("employees")
+      .select("is_team_lead, can_access_all_students")
+      .eq("id", employee.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        setTeamLead(!!data.is_team_lead);
+        setAccessAllStudents(!!data.can_access_all_students);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, employee?.id]);
+
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["employees"] });
+    void queryClient.invalidateQueries({ queryKey: ["current-employee"] });
     void queryClient.invalidateQueries({ queryKey: ["email_logs"] });
     void queryClient.invalidateQueries({ queryKey: ["admin-dashboard-stats"] });
   };
@@ -104,7 +125,12 @@ export function EmployeeFormDialog({
           patch.can_access_all_students = teamLead ? true : accessAllStudents;
           patch.is_team_lead = teamLead;
         }
-        const { error } = await supabase.from("employees").update(patch).eq("id", employee.id);
+        const { data: saved, error } = await supabase
+          .from("employees")
+          .update(patch)
+          .eq("id", employee.id)
+          .select("is_team_lead, can_access_all_students")
+          .maybeSingle();
         if (error) {
           if (isMissingColumnError(error) && allowElevatedFlags && (accessAllStudents || teamLead)) {
             throw new Error(
@@ -123,6 +149,13 @@ export function EmployeeFormDialog({
             })
             .eq("id", employee.id);
           if (fallbackErr) throw fallbackErr;
+        } else if (allowElevatedFlags && saved) {
+          const wantAll = teamLead ? true : accessAllStudents;
+          if (!!saved.is_team_lead !== teamLead || !!saved.can_access_all_students !== wantAll) {
+            throw new Error(
+              "Team Lead / all-students access did not save. Only an admin can change those flags.",
+            );
+          }
         }
         await persistDailyTarget(employee.id, target);
         toast.success("Employee updated.");

@@ -42,6 +42,35 @@ export function employeeEffectiveDailyTarget(
 }
 
 
+/** Prefer this list; falls back if optional target/activity columns are missing. */
+export const EMPLOYEE_SELECT_FULL =
+  "id, user_id, name, email, role, job_role_category, avatar, status, created_at, daily_target, joining_date, last_active_at, can_access_all_students, is_team_lead";
+/** Always includes Team Lead / all-students flags (must not be dropped on fallback). */
+export const EMPLOYEE_SELECT_WITH_FLAGS =
+  "id, user_id, name, email, role, job_role_category, avatar, status, created_at, can_access_all_students, is_team_lead";
+export const EMPLOYEE_SELECT_MIN =
+  "id, user_id, name, email, role, job_role_category, avatar, status, created_at";
+
+type PostgrestLikeError = { message?: string; code?: string } | null;
+
+/**
+ * Retry an employees select without optional columns, but keep access flags
+ * unless those columns themselves are missing.
+ */
+export async function withEmployeeSelectFallback<T>(
+  run: (columns: string) => Promise<{ data: T | null; error: PostgrestLikeError }>,
+): Promise<T> {
+  const attempts = [EMPLOYEE_SELECT_FULL, EMPLOYEE_SELECT_WITH_FLAGS, EMPLOYEE_SELECT_MIN];
+  let lastError: PostgrestLikeError = null;
+  for (const columns of attempts) {
+    const res = await run(columns);
+    if (!res.error) return res.data as T;
+    lastError = res.error;
+    if (!isMissingColumnError(res.error)) throw res.error;
+  }
+  throw lastError ?? new Error("Failed to load employees");
+}
+
 /** True when PostgREST reports a missing column (migration not applied yet). */
 export function isMissingColumnError(error: { message?: string; code?: string } | null): boolean {
   if (!error?.message) return false;

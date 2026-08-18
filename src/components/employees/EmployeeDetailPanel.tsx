@@ -133,6 +133,13 @@ export function EmployeeDetailPanel({
               >
                 {employee.status === "inactive" ? "Inactive" : "Active"}
               </Badge>
+              {employee.is_team_lead ? (
+                <Badge className="border-sky-500/30 bg-sky-500/10 text-sky-800">Team Lead</Badge>
+              ) : employee.can_access_all_students ? (
+                <Badge className="border-violet-500/30 bg-violet-500/10 text-violet-800">
+                  All students
+                </Badge>
+              ) : null}
             </div>
           </div>
         </div>
