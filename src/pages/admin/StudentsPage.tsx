@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Check,
   KeyRound,
   Mail,
   MoreHorizontal,
@@ -13,13 +12,13 @@ import {
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusDot } from "@/components/ui/status-dot";
 import { Dialog, Select } from "@/components/ui/dialog";
 import { StudentFormDialog } from "@/components/students/StudentFormDialog";
 import { StudentDetailPanel } from "@/components/students/StudentDetailPanel";
@@ -28,8 +27,11 @@ import { useEmployees } from "@/hooks/useEmployees";
 import { useStudents } from "@/hooks/useStudents";
 import { useWelcomeEmailLogs } from "@/hooks/useEmailLogs";
 import { useStudentAppStats } from "@/hooks/useStudentAppStats";
-import { getStudentBucket, type Student } from "@/lib/students";
+import { getStudentBucket, studentStartDate, type Student } from "@/lib/students";
+import { livePaymentStatus } from "@/lib/billing";
+import { formatRosterDate } from "@/lib/timezone";
 import { sendWelcomeCredentials } from "@/lib/sendWelcomeCredentials";
+import { runPaymentReminders } from "@/hooks/usePayments";
 import { supabase } from "@/integrations/supabase/client";
 import { getInitials } from "@/features/employees/constants";
 import {
@@ -95,6 +97,10 @@ export default function AdminStudentsPage() {
   const [resetPassword, setResetPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    void runPaymentReminders();
+  }, []);
+
   const empName = useMemo(
     () => Object.fromEntries(employees.map((e) => [e.id, e.name])),
     [employees],
@@ -156,10 +162,10 @@ export default function AdminStudentsPage() {
           cmp = aInt - bInt;
           break;
         case "payment":
-          cmp = (a.payment_status || "unpaid").localeCompare(b.payment_status || "unpaid");
+          cmp = livePaymentStatus(a).localeCompare(livePaymentStatus(b));
           break;
-        case "status":
-          cmp = getStudentBucket(a).localeCompare(getStudentBucket(b));
+        case "startDate":
+          cmp = (studentStartDate(a) || "").localeCompare(studentStartDate(b) || "");
           break;
         default:
           cmp = a.name.localeCompare(b.name);
@@ -177,7 +183,7 @@ export default function AdminStudentsPage() {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
-      setSortDir(key === "apps" || key === "interviews" ? "desc" : "asc");
+      setSortDir(key === "apps" || key === "interviews" || key === "startDate" ? "desc" : "asc");
     }
   };
 
@@ -427,16 +433,16 @@ export default function AdminStudentsPage() {
 
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full min-w-[1040px] text-left text-sm">
               <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <Th label="Student" onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir} />
+                  <Th label="Start Date" onClick={() => toggleSort("startDate")} active={sortKey === "startDate"} dir={sortDir} />
                   <Th label="Program" onClick={() => toggleSort("program")} active={sortKey === "program"} dir={sortDir} />
                   <Th label="Assigned to" onClick={() => toggleSort("assigned")} active={sortKey === "assigned"} dir={sortDir} />
                   <Th label="Apps" onClick={() => toggleSort("apps")} active={sortKey === "apps"} dir={sortDir} />
                   <Th label="Interviews" onClick={() => toggleSort("interviews")} active={sortKey === "interviews"} dir={sortDir} />
                   <Th label="Payment" onClick={() => toggleSort("payment")} active={sortKey === "payment"} dir={sortDir} />
-                  <Th label="Status" onClick={() => toggleSort("status")} active={sortKey === "status"} dir={sortDir} />
                   <th className="px-3 py-3 font-medium">Welcome email</th>
                   <th className="px-3 py-3 font-medium">Actions</th>
                 </tr>
@@ -460,9 +466,11 @@ export default function AdminStudentsPage() {
                 ) : null}
                 {pageRows.map((stu) => {
                   const bucket = getStudentBucket(stu);
-                  const stats = statsMap[stu.id] ?? { appCount: 0, interviewCount: 0 };
+                  const stats = statsMap[stu.id] ?? { appCount: 0, interviewCount: 0, todayCount: 0 };
                   const log = stu.user_id ? emailLogs.data?.[stu.user_id] : null;
-                  const join = stu.joining_date || stu.applied_date;
+                  const start = studentStartDate(stu);
+                  const statusTone =
+                    bucket === "inactive" ? "inactive" : bucket === "unassigned" ? "pending" : "active";
 
                   return (
                     <tr key={stu.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
@@ -475,51 +483,34 @@ export default function AdminStudentsPage() {
                             {getInitials(stu.name)}
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-primary hover:underline">{stu.name}</p>
+                            <p className="flex items-center gap-1.5 font-medium text-primary hover:underline">
+                              <StatusDot tone={statusTone} pulse={statusTone === "active"} />
+                              <span className="truncate">{stu.name}</span>
+                            </p>
                             <p className="truncate text-xs text-muted-foreground">{stu.email}</p>
-                            {join ? (
-                              <p className="text-[11px] text-muted-foreground">
-                                Joined {format(new Date(join), "MMM d, yyyy")}
-                              </p>
-                            ) : null}
                           </div>
                         </Link>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
+                        {formatRosterDate(start)}
                       </td>
                       <td className="px-3 py-3 text-muted-foreground">{stu.program || "—"}</td>
                       <td className="px-3 py-3 text-muted-foreground">
                         {stu.assigned_to ? empName[stu.assigned_to] || "—" : "Unassigned"}
                       </td>
                       <td className="px-3 py-3">
-                        <span className="inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
-                          {stats.appCount}
-                        </span>
+                        <div className="flex items-baseline gap-2 whitespace-nowrap">
+                          <span className="inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
+                            {stats.appCount}
+                          </span>
+                          <span className="text-[11px] tabular-nums text-muted-foreground">
+                            {stats.todayCount} today
+                          </span>
+                        </div>
                       </td>
                       <td className="px-3 py-3 tabular-nums text-muted-foreground">{stats.interviewCount}</td>
                       <td className="px-3 py-3">
-                        <PaymentBadge status={stu.payment_status} />
-                      </td>
-                      <td className="px-3 py-3">
-                        <Badge
-                          className={
-                            bucket === "inactive"
-                              ? "border-destructive/30 bg-destructive/10 text-destructive"
-                              : bucket === "unassigned"
-                                ? "border-amber-500/30 bg-amber-500/10 text-amber-700"
-                                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-                          }
-                        >
-                          {bucket === "inactive" ? (
-                            <>
-                              <UserX className="h-3 w-3" /> Inactive
-                            </>
-                          ) : bucket === "unassigned" ? (
-                            "Pending"
-                          ) : (
-                            <>
-                              <Check className="h-3 w-3" /> Active
-                            </>
-                          )}
-                        </Badge>
+                        <PaymentBadge status={livePaymentStatus(stu)} />
                       </td>
                       <td className="px-3 py-3">
                         <EmailStatusBadge log={log} />
@@ -751,7 +742,7 @@ export default function AdminStudentsPage() {
 }
 
 function PaymentBadge({ status }: { status?: string | null }) {
-  const s = status || "unpaid";
+  const s = status === "paid" ? "paid" : status === "waived" || status === "n/a" ? status : "unpaid";
   const cls =
     s === "paid"
       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"

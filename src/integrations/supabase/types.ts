@@ -702,6 +702,8 @@ export type Database = {
           payment_method: string | null
           payment_notes: string | null
           payment_status: string
+          next_pay_date: string | null
+          payment_reminder_sent_on: string | null
           phone: string
           profile_json: Json | null
           program: string
@@ -727,6 +729,8 @@ export type Database = {
           payment_method?: string | null
           payment_notes?: string | null
           payment_status?: string
+          next_pay_date?: string | null
+          payment_reminder_sent_on?: string | null
           phone?: string
           profile_json?: Json | null
           program?: string
@@ -752,6 +756,8 @@ export type Database = {
           payment_method?: string | null
           payment_notes?: string | null
           payment_status?: string
+          next_pay_date?: string | null
+          payment_reminder_sent_on?: string | null
           phone?: string
           profile_json?: Json | null
           program?: string

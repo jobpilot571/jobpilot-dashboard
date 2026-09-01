@@ -10,11 +10,6 @@ import { sendWelcomeCredentials } from "@/lib/sendWelcomeCredentials";
 import { isMissingColumnError } from "@/lib/employees";
 import type { Employee } from "@/lib/employees";
 import type { Student } from "@/lib/students";
-import {
-  DEFAULT_PAYMENT_STATUS,
-  PAYMENT_STATUSES,
-  type PaymentStatus,
-} from "@/lib/constants";
 import { JOB_ROLE_CATEGORIES } from "@/features/employees/constants";
 import { PROGRAM_SUGGESTIONS } from "@/features/students/constants";
 import { getTodayCST } from "@/lib/timezone";
@@ -39,11 +34,6 @@ export function StudentFormDialog({
   const [program, setProgram] = useState("");
   const [jobRoleCategory, setJobRoleCategory] = useState("");
   const [assignedTo, setAssignedTo] = useState("unassigned");
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(DEFAULT_PAYMENT_STATUS);
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentDate, setPaymentDate] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("");
-  const [paymentNotes, setPaymentNotes] = useState("");
   const [joiningDate, setJoiningDate] = useState("");
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
 
@@ -56,11 +46,6 @@ export function StudentFormDialog({
       setProgram(student.program ?? "");
       setJobRoleCategory("");
       setAssignedTo(student.assigned_to ?? "unassigned");
-      setPaymentStatus((student.payment_status as PaymentStatus) || DEFAULT_PAYMENT_STATUS);
-      setPaymentAmount(student.payment_amount != null ? String(student.payment_amount) : "");
-      setPaymentDate(student.payment_date ?? "");
-      setPaymentMethod(student.payment_method ?? "");
-      setPaymentNotes(student.payment_notes ?? "");
       setJoiningDate(student.joining_date ?? student.applied_date ?? "");
     } else {
       setName("");
@@ -69,11 +54,6 @@ export function StudentFormDialog({
       setProgram("");
       setJobRoleCategory("");
       setAssignedTo("unassigned");
-      setPaymentStatus(DEFAULT_PAYMENT_STATUS);
-      setPaymentAmount("");
-      setPaymentDate("");
-      setPaymentMethod("");
-      setPaymentNotes("");
       setJoiningDate(getTodayCST());
       setSendWelcomeEmail(true);
     }
@@ -84,22 +64,18 @@ export function StudentFormDialog({
     void queryClient.invalidateQueries({ queryKey: ["email_logs"] });
     void queryClient.invalidateQueries({ queryKey: ["admin-dashboard-stats"] });
     void queryClient.invalidateQueries({ queryKey: ["student-app-stats"] });
+    void queryClient.invalidateQueries({ queryKey: ["student-billing"] });
   };
 
-  const paymentPayload = () => {
-    const amount = paymentAmount.trim() === "" ? null : Number(paymentAmount);
-    return {
-      payment_status: paymentStatus,
-      payment_amount: Number.isFinite(amount as number) ? amount : null,
-      payment_date: paymentDate || null,
-      payment_method: paymentMethod.trim() || null,
-      payment_notes: paymentNotes.trim() || null,
+  const persistJoining = async (studentId: string, opts?: { seedBilling?: boolean }) => {
+    const payload: Record<string, string | null> = {
       joining_date: joiningDate || null,
     };
-  };
-
-  const persistPaymentFields = async (studentId: string) => {
-    const { error } = await supabase.from("students").update(paymentPayload()).eq("id", studentId);
+    if (opts?.seedBilling) {
+      payload.next_pay_date = joiningDate || null;
+      payload.payment_status = "unpaid";
+    }
+    const { error } = await supabase.from("students").update(payload).eq("id", studentId);
     if (error && !isMissingColumnError(error)) throw error;
   };
 
@@ -133,7 +109,7 @@ export function StudentFormDialog({
           })
           .eq("id", student.id);
         if (error) throw error;
-        await persistPaymentFields(student.id);
+        await persistJoining(student.id);
         toast.success("Student updated.");
         invalidate();
         onClose();
@@ -173,7 +149,7 @@ export function StudentFormDialog({
 
       if (!newStudent?.id) throw new Error("Student insert returned no id.");
 
-      await persistPaymentFields(newStudent.id);
+      await persistJoining(newStudent.id, { seedBilling: true });
 
       try {
         const { data: loginData, error: loginErr } = await supabase.functions.invoke("manage-employee", {
@@ -243,7 +219,7 @@ export function StudentFormDialog({
       onClose={onClose}
       wide
       title={isEdit ? "Edit student" : "Add student"}
-      description={isEdit ? "Update profile, assignment, and payment." : "Creates a login automatically."}
+      description={isEdit ? "Update profile and assignment. Billing is on Payments." : "Creates a login automatically."}
       footer={
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
@@ -278,8 +254,9 @@ export function StudentFormDialog({
             <Input id="stu-phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={32} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="stu-joining">Joining date</Label>
+            <Label htmlFor="stu-joining">Start date</Label>
             <Input id="stu-joining" type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} />
+            <p className="text-[11px] text-muted-foreground">Admin only. This date drives the payment cycle and cannot be changed on Payments.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="stu-program">Program / target role</Label>
@@ -323,56 +300,6 @@ export function StudentFormDialog({
               ))}
             </Select>
           </div>
-        </div>
-
-        <div className="rounded-lg border border-border p-3 space-y-3">
-          <p className="text-sm font-semibold text-foreground">Payment</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="stu-pay-status">Status</Label>
-              <Select
-                id="stu-pay-status"
-                value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
-              >
-                {PAYMENT_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="stu-pay-amount">Amount</Label>
-              <Input
-                id="stu-pay-amount"
-                type="number"
-                min={0}
-                step="0.01"
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                placeholder="Optional"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="stu-pay-date">Payment date</Label>
-              <Input id="stu-pay-date" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="stu-pay-method">Method</Label>
-              <Input
-                id="stu-pay-method"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                placeholder="card, bank, cash…"
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="stu-pay-notes">Notes</Label>
-              <Input id="stu-pay-notes" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">Use n/a for free trials or when payment does not apply.</p>
         </div>
 
         {!isEdit ? (

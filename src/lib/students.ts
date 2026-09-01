@@ -22,6 +22,8 @@ export interface Student {
   payment_date?: string | null;
   payment_method?: string | null;
   payment_notes?: string | null;
+  next_pay_date?: string | null;
+  payment_reminder_sent_on?: string | null;
   last_active_at?: string | null;
   profile_json?: unknown;
 }
@@ -33,4 +35,10 @@ export function getStudentBucket(student: Pick<Student, "status" | "assigned_to"
   if (student.status === "inactive") return "inactive";
   if (student.assigned_to) return "assigned";
   return "unassigned";
+}
+
+export function studentStartDate(
+  student: Pick<Student, "joining_date" | "applied_date" | "created_at">,
+): string | null {
+  return student.joining_date || student.applied_date || student.created_at || null;
 }

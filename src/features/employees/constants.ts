@@ -20,6 +20,13 @@ export function getInitials(name: string): string {
 }
 
 export type EmployeeStatusFilter = "all" | "active" | "inactive";
-export type EmployeeSortKey = "name" | "category" | "appsToday" | "progress" | "status" | "assigned";
+export type EmployeeSortKey =
+  | "name"
+  | "startDate"
+  | "category"
+  | "appsToday"
+  | "progress"
+  | "status"
+  | "assigned";
 
 export const PAGE_SIZE = 10;

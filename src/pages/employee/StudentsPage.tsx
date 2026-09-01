@@ -3,16 +3,17 @@ import { Link } from "react-router-dom";
 import { Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { NoEmployeeProfile } from "@/components/employee/NoEmployeeProfile";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusDot } from "@/components/ui/status-dot";
 import { ProgressBar } from "@/components/dashboard/ProgressBar";
 import { useAuth } from "@/contexts/AuthContext";
 import { employeeSeesAllStudents } from "@/lib/employees";
 import { useCurrentEmployee } from "@/hooks/useCurrentEmployee";
 import { useMyStudents } from "@/hooks/useMyStudents";
 import { useStudentAppStats } from "@/hooks/useStudentAppStats";
-import { getStudentBucket } from "@/lib/students";
+import { getStudentBucket, studentStartDate } from "@/lib/students";
+import { formatRosterDate } from "@/lib/timezone";
 
 export default function EmployeeStudentsPage() {
   const { user } = useAuth();
@@ -66,12 +67,12 @@ export default function EmployeeStudentsPage() {
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[800px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">Student</th>
+                <th className="px-4 py-3 font-medium">Start Date</th>
                 <th className="px-4 py-3 font-medium">Program</th>
-                <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Apps</th>
                 <th className="px-4 py-3 font-medium">Interviews</th>
                 <th className="px-4 py-3 font-medium">Documents</th>
@@ -90,6 +91,8 @@ export default function EmployeeStudentsPage() {
                 : rows.map((s) => {
                     const bucket = getStudentBucket(s);
                     const stats = appStats[s.id];
+                    const statusTone =
+                      bucket === "inactive" ? "inactive" : bucket === "unassigned" ? "pending" : "active";
                     const docPct =
                       s.documents_total > 0
                         ? Math.round((s.documents_submitted / s.documents_total) * 100)
@@ -101,15 +104,25 @@ export default function EmployeeStudentsPage() {
                             to={`/app/students/${s.id}`}
                             className="font-medium text-foreground hover:underline"
                           >
-                            {s.name}
+                            <span className="inline-flex items-center gap-1.5">
+                              <StatusDot tone={statusTone} pulse={statusTone === "active"} />
+                              <span>{s.name}</span>
+                            </span>
                           </Link>
                           <div className="text-xs text-muted-foreground">{s.email}</div>
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">{s.program || "—"}</td>
-                        <td className="px-4 py-3 capitalize">
-                          <Badge className="border-border bg-muted text-muted-foreground">{bucket}</Badge>
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                          {formatRosterDate(studentStartDate(s))}
                         </td>
-                        <td className="px-4 py-3 tabular-nums">{stats?.appCount ?? 0}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{s.program || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-baseline gap-2 whitespace-nowrap">
+                            <span className="tabular-nums font-medium">{stats?.appCount ?? 0}</span>
+                            <span className="text-[11px] tabular-nums text-muted-foreground">
+                              {stats?.todayCount ?? 0} today
+                            </span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 tabular-nums">{stats?.interviewCount ?? 0}</td>
                         <td className="px-4 py-3">
                           <div className="flex min-w-[120px] flex-col gap-1">

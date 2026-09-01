@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getTodayCST } from "@/lib/timezone";
 
 export interface StudentAppStats {
   appCount: number;
   interviewCount: number;
+  todayCount: number;
 }
 
 async function exactAppCounts(studentIds: string[]): Promise<Record<string, number>> {
@@ -17,6 +19,27 @@ async function exactAppCounts(studentIds: string[]): Promise<Record<string, numb
           .from("job_applications")
           .select("id", { count: "exact", head: true })
           .eq("student_id", id);
+        if (error) throw error;
+        counts[id] = count ?? 0;
+      }),
+    );
+  }
+  return counts;
+}
+
+async function exactTodayCounts(studentIds: string[]): Promise<Record<string, number>> {
+  const today = getTodayCST();
+  const counts: Record<string, number> = {};
+  const chunkSize = 20;
+  for (let i = 0; i < studentIds.length; i += chunkSize) {
+    const chunk = studentIds.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map(async (id) => {
+        const { count, error } = await supabase
+          .from("job_applications")
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", id)
+          .eq("applied_date", today);
         if (error) throw error;
         counts[id] = count ?? 0;
       }),
@@ -78,9 +101,10 @@ export function useStudentAppStats(studentIds?: string[]) {
       }
       if (ids.length === 0) return {} as Record<string, StudentAppStats>;
 
-      const [appCounts, interviewCounts] = await Promise.all([
+      const [appCounts, interviewCounts, todayCounts] = await Promise.all([
         exactAppCounts(ids),
         exactInterviewCounts(ids),
+        exactTodayCounts(ids),
       ]);
 
       const map: Record<string, StudentAppStats> = {};
@@ -88,6 +112,7 @@ export function useStudentAppStats(studentIds?: string[]) {
         map[id] = {
           appCount: appCounts[id] ?? 0,
           interviewCount: interviewCounts[id] ?? 0,
+          todayCount: todayCounts[id] ?? 0,
         };
       }
       return map;

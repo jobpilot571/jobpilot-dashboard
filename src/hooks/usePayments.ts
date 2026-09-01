@@ -2,24 +2,28 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_PAYMENT_STATUS, type PaymentStatus } from "@/lib/constants";
+import { livePaymentStatus, nextPayDateAfter } from "@/lib/billing";
+import { studentStartDate, type Student } from "@/lib/students";
+import { getTodayCST } from "@/lib/timezone";
+import { isMissingColumnError } from "@/lib/employees";
 
 // New tables may not be in generated types yet
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
 
-export interface StudentPaymentRow {
-  id?: string;
+export interface StudentBillingRow {
   student_id: string;
-  year: number;
-  month: number;
-  amount: number;
+  student_name: string;
+  student_email: string;
+  student_status: string;
+  start_date: string | null;
+  rate: number;
   status: PaymentStatus | string;
   payment_method: string;
   paid_at: string | null;
+  next_pay_date: string | null;
   notes: string;
-  student_name?: string;
-  student_email?: string;
-  student_status?: string;
+  reminder_sent_on: string | null;
 }
 
 export interface EmployeeSalaryRow {
@@ -45,65 +49,133 @@ type PaymentSave = {
   notes: string;
 };
 
-export function useStudentPayments(year: number, month: number) {
+export type StudentBillingSave = {
+  student_id: string;
+  rate: number;
+  status: string;
+  payment_method: string;
+  paid_at: string | null;
+  next_pay_date: string | null;
+  notes: string;
+};
+
+function toBillingRow(s: Student): StudentBillingRow {
+  const start = studentStartDate(s);
+  const live = livePaymentStatus(s);
+  return {
+    student_id: s.id,
+    student_name: s.name,
+    student_email: s.email,
+    student_status: s.status,
+    start_date: start,
+    rate: Number(s.payment_amount ?? 0),
+    status: live,
+    payment_method: s.payment_method ?? "",
+    paid_at: s.payment_date ?? null,
+    next_pay_date: s.next_pay_date ?? start ?? null,
+    notes: s.payment_notes ?? "",
+    reminder_sent_on: s.payment_reminder_sent_on ?? null,
+  };
+}
+
+export function useStudentBilling() {
   return useQuery({
-    queryKey: ["student-payments", year, month],
-    queryFn: async (): Promise<StudentPaymentRow[]> => {
-      const { data: students, error: stuErr } = await supabase
+    queryKey: ["student-billing"],
+    queryFn: async (): Promise<StudentBillingRow[]> => {
+      const { data, error } = await supabase
         .from("students")
         .select(
-          "id, name, email, status, payment_amount, payment_status, payment_method, payment_date, payment_notes",
+          "id, name, email, status, joining_date, applied_date, created_at, payment_amount, payment_status, payment_method, payment_date, payment_notes, next_pay_date, payment_reminder_sent_on",
         )
         .order("name");
-      if (stuErr) throw stuErr;
+      if (!error) return ((data ?? []) as Student[]).map(toBillingRow);
+      if (!isMissingColumnError(error)) throw error;
 
-      const { data: payments, error: payErr } = await db
-        .from("student_payments")
-        .select("*")
-        .eq("year", year)
-        .eq("month", month);
-      if (payErr) throw payErr;
-
-      const byStudent = new Map(
-        ((payments ?? []) as { student_id: string }[]).map((p) => [
-          p.student_id,
-          p as Record<string, unknown>,
-        ]),
-      );
-
-      return (students ?? []).map((s) => {
-        const existing = byStudent.get(s.id);
-        if (existing) {
-          return {
-            id: String(existing.id),
-            student_id: s.id,
-            year,
-            month,
-            amount: Number(existing.amount ?? 0),
-            status: String(existing.status ?? DEFAULT_PAYMENT_STATUS),
-            payment_method: String(existing.payment_method ?? ""),
-            paid_at: (existing.paid_at as string | null) ?? null,
-            notes: String(existing.notes ?? ""),
-            student_name: s.name,
-            student_email: s.email,
-            student_status: s.status,
-          };
-        }
-        return {
-          student_id: s.id,
-          year,
-          month,
-          amount: Number(s.payment_amount ?? 0),
-          status: String(s.payment_status ?? DEFAULT_PAYMENT_STATUS),
-          payment_method: String(s.payment_method ?? ""),
-          paid_at: (s.payment_date as string | null) ?? null,
-          notes: String(s.payment_notes ?? ""),
-          student_name: s.name,
-          student_email: s.email,
-          student_status: s.status,
-        };
-      });
+      const fallback = await supabase
+        .from("students")
+        .select(
+          "id, name, email, status, joining_date, applied_date, created_at, payment_amount, payment_status, payment_method, payment_date, payment_notes",
+        )
+        .order("name");
+      if (fallback.error) throw fallback.error;
+      return ((fallback.data ?? []) as Student[]).map(toBillingRow);
     },
+  });
+}
+
+export function useUpsertStudentBilling() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: StudentBillingSave) => {
+      const today = getTodayCST();
+      let paidAt = input.paid_at || null;
+      let nextPay = input.next_pay_date || null;
+      let status = input.status;
+
+      if (status === "paid") {
+        paidAt = paidAt || today;
+        if (!nextPay || nextPay <= paidAt) {
+          const { data: stu } = await supabase
+            .from("students")
+            .select("joining_date, applied_date, created_at")
+            .eq("id", input.student_id)
+            .maybeSingle();
+          nextPay = nextPayDateAfter(paidAt, stu?.joining_date || stu?.applied_date || paidAt);
+        }
+      } else if (status !== "waived" && status !== "n/a") {
+        status = livePaymentStatus({
+          payment_status: status,
+          next_pay_date: nextPay,
+          payment_date: paidAt,
+          joining_date: null,
+        });
+      }
+
+      const payload = {
+        payment_amount: input.rate,
+        payment_status: status,
+        payment_method: input.payment_method || null,
+        payment_date: paidAt,
+        payment_notes: input.notes || null,
+        next_pay_date: nextPay,
+      };
+
+      const { error } = await supabase.from("students").update(payload).eq("id", input.student_id);
+      if (error && isMissingColumnError(error)) {
+        const { next_pay_date: _n, ...rest } = payload;
+        const retry = await supabase.from("students").update(rest).eq("id", input.student_id);
+        if (retry.error) throw retry.error;
+      } else if (error) {
+        throw error;
+      }
+
+      if (paidAt) {
+        const [y, m] = paidAt.split("-").map(Number);
+        await db.from("student_payments").upsert(
+          {
+            student_id: input.student_id,
+            year: y,
+            month: m,
+            amount: input.rate,
+            status,
+            payment_method: input.payment_method,
+            paid_at: paidAt,
+            notes: input.notes,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "student_id,year,month" },
+        );
+      }
+
+      return payload;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["student-billing"] });
+      void qc.invalidateQueries({ queryKey: ["students"] });
+      void qc.invalidateQueries({ queryKey: ["student-payments"] });
+      toast.success("Payment saved.");
+    },
+    onError: (err: Error) => toast.error(err.message || "Failed to save payment."),
   });
 }
 
@@ -167,52 +239,6 @@ export function useEmployeeSalaries(year: number, month: number) {
   });
 }
 
-export function useUpsertStudentPayment(year: number, month: number) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: { student_id: string } & PaymentSave) => {
-      const { data, error } = await db
-        .from("student_payments")
-        .upsert(
-          {
-            student_id: input.student_id,
-            year,
-            month,
-            amount: input.amount,
-            status: input.status,
-            payment_method: input.payment_method,
-            paid_at: input.paid_at,
-            notes: input.notes,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "student_id,year,month" },
-        )
-        .select()
-        .single();
-      if (error) throw error;
-
-      await supabase
-        .from("students")
-        .update({
-          payment_amount: input.amount,
-          payment_status: input.status,
-          payment_method: input.payment_method,
-          payment_date: input.paid_at,
-          payment_notes: input.notes,
-        })
-        .eq("id", input.student_id);
-
-      return data;
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["student-payments", year, month] });
-      void qc.invalidateQueries({ queryKey: ["students"] });
-      toast.success("Student payment saved.");
-    },
-    onError: (err: Error) => toast.error(err.message || "Failed to save payment."),
-  });
-}
-
 export function useUpsertEmployeeSalary(year: number, month: number) {
   const qc = useQueryClient();
   return useMutation({
@@ -244,4 +270,18 @@ export function useUpsertEmployeeSalary(year: number, month: number) {
     },
     onError: (err: Error) => toast.error(err.message || "Failed to save salary."),
   });
+}
+
+export async function runPaymentReminders(): Promise<{ sent: number; skipped: number; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("send-payment-reminders", { body: {} });
+  if (error) {
+    const bodyError =
+      data && typeof data === "object" && "error" in data
+        ? String((data as { error: unknown }).error ?? "")
+        : "";
+    return { sent: 0, skipped: 0, error: bodyError || error.message };
+  }
+  const sent = Number((data as { sent?: number })?.sent ?? 0);
+  const skipped = Number((data as { skipped?: number })?.skipped ?? 0);
+  return { sent, skipped };
 }

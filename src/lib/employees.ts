@@ -82,6 +82,8 @@ export function isMissingColumnError(error: { message?: string; code?: string } 
     msg.includes("payment_status") ||
     msg.includes("payment_amount") ||
     msg.includes("joining_date") ||
+    msg.includes("next_pay_date") ||
+    msg.includes("payment_reminder_sent_on") ||
     msg.includes("last_active_at") ||
     msg.includes("can_access_all_students") ||
     msg.includes("is_team_lead") ||
@@ -97,4 +99,10 @@ export function employeeSeesAllStudents(employee: Pick<Employee, "can_access_all
 /** True when the employee can manage all employees (Team Lead). */
 export function employeeIsTeamLead(employee: Pick<Employee, "is_team_lead"> | null | undefined): boolean {
   return !!employee?.is_team_lead;
+}
+
+export function employeeStartDate(
+  employee: Pick<Employee, "joining_date" | "created_at">,
+): string | null {
+  return employee.joining_date || employee.created_at || null;
 }

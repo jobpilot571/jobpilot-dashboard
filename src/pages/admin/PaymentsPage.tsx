@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { DollarSign, GraduationCap, Save, Users } from "lucide-react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,19 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select } from "@/components/ui/dialog";
 import {
+  runPaymentReminders,
   useEmployeeSalaries,
-  useStudentPayments,
+  useStudentBilling,
   useUpsertEmployeeSalary,
-  useUpsertStudentPayment,
+  useUpsertStudentBilling,
   type EmployeeSalaryRow,
-  type StudentPaymentRow,
+  type StudentBillingRow,
 } from "@/hooks/usePayments";
 import {
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
   type PaymentStatus,
 } from "@/lib/constants";
-import { getTodayCST } from "@/lib/timezone";
+import { livePaymentStatus, nextPayDateAfter } from "@/lib/billing";
+import { formatRosterDate, getTodayCST } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 
 type Tab = "students" | "employees";
@@ -51,7 +54,7 @@ function statusTone(status: string) {
   return "border-destructive/30 bg-destructive/10 text-destructive";
 }
 
-type Draft = {
+type EmpDraft = {
   amount: string;
   status: string;
   payment_method: string;
@@ -59,18 +62,38 @@ type Draft = {
   notes: string;
 };
 
-function toDraft(row: {
+type StuDraft = {
+  rate: string;
+  status: string;
+  payment_method: string;
+  paid_at: string;
+  next_pay_date: string;
+  notes: string;
+};
+
+function toEmpDraft(row: {
   amount: number;
   status: string;
   payment_method: string;
   paid_at: string | null;
   notes: string;
-}): Draft {
+}): EmpDraft {
   return {
     amount: String(row.amount ?? 0),
     status: row.status || "unpaid",
     payment_method: row.payment_method || "",
     paid_at: row.paid_at || "",
+    notes: row.notes || "",
+  };
+}
+
+function toStuDraft(row: StudentBillingRow): StuDraft {
+  return {
+    rate: String(row.rate ?? 0),
+    status: row.status || "unpaid",
+    payment_method: row.payment_method || "",
+    paid_at: row.paid_at || "",
+    next_pay_date: row.next_pay_date || "",
     notes: row.notes || "",
   };
 }
@@ -82,6 +105,7 @@ export default function AdminPaymentsPage() {
   const [tab, setTab] = useState<Tab>("students");
   const [showInactive, setShowInactive] = useState(false);
   const [search, setSearch] = useState("");
+  const [reminding, setReminding] = useState(false);
 
   const years = useMemo(() => {
     const list: number[] = [];
@@ -97,29 +121,56 @@ export default function AdminPaymentsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Finance</p>
             <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight">Payments</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Edit each student&apos;s monthly payment and each employee&apos;s salary for the selected month.
+              Admin-only billing: rate, how they paid, paid date, and next pay date. Start date comes from
+              Students and cannot be edited here.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              className="w-[140px]"
-              value={String(month)}
-              onChange={(e) => setMonth(Number(e.target.value))}
+          {tab === "employees" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                className="w-[140px]"
+                value={String(month)}
+                onChange={(e) => setMonth(Number(e.target.value))}
+              >
+                {MONTHS.map((label, i) => (
+                  <option key={label} value={i + 1}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+              <Select className="w-[100px]" value={String(year)} onChange={(e) => setYear(Number(e.target.value))}>
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={reminding}
+              onClick={() => {
+                setReminding(true);
+                void runPaymentReminders()
+                  .then((r) => {
+                    if (r.error) throw new Error(r.error);
+                    if (r.sent > 0) {
+                      toast.success(`Sent ${r.sent} payment reminder${r.sent === 1 ? "" : "s"}.`);
+                    } else {
+                      toast.message("No reminders due today (or already sent).");
+                    }
+                  })
+                  .catch((err: Error) => {
+                    toast.error(err.message || "Reminder send failed.");
+                  })
+                  .finally(() => setReminding(false));
+              }}
             >
-              {MONTHS.map((label, i) => (
-                <option key={label} value={i + 1}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-            <Select className="w-[100px]" value={String(year)} onChange={(e) => setYear(Number(e.target.value))}>
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </Select>
-          </div>
+              {reminding ? "Sending…" : "Send due reminders"}
+            </Button>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -163,12 +214,7 @@ export default function AdminPaymentsPage() {
         </div>
 
         {tab === "students" ? (
-          <StudentsPaymentsTable
-            year={year}
-            month={month}
-            search={search}
-            showInactive={showInactive}
-          />
+          <StudentsBillingTable search={search} showInactive={showInactive} />
         ) : (
           <EmployeesSalariesTable
             year={year}
@@ -182,24 +228,20 @@ export default function AdminPaymentsPage() {
   );
 }
 
-function StudentsPaymentsTable({
-  year,
-  month,
+function StudentsBillingTable({
   search,
   showInactive,
 }: {
-  year: number;
-  month: number;
   search: string;
   showInactive: boolean;
 }) {
-  const { data = [], isLoading, isError, error } = useStudentPayments(year, month);
-  const save = useUpsertStudentPayment(year, month);
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const { data = [], isLoading, isError, error } = useStudentBilling();
+  const save = useUpsertStudentBilling();
+  const [drafts, setDrafts] = useState<Record<string, StuDraft>>({});
 
   useEffect(() => {
-    const next: Record<string, Draft> = {};
-    for (const row of data) next[row.student_id] = toDraft(row);
+    const next: Record<string, StuDraft> = {};
+    for (const row of data) next[row.student_id] = toStuDraft(row);
     setDrafts(next);
   }, [data]);
 
@@ -215,18 +257,6 @@ function StudentsPaymentsTable({
     });
   }, [data, search, showInactive]);
 
-  const totals = useMemo(() => {
-    let due = 0;
-    let paid = 0;
-    for (const r of rows) {
-      const d = drafts[r.student_id] ?? toDraft(r);
-      const amt = Number(d.amount) || 0;
-      due += amt;
-      if (d.status === "paid") paid += amt;
-    }
-    return { due, paid, count: rows.length };
-  }, [rows, drafts]);
-
   if (isLoading) return <Skeleton className="h-64 w-full rounded-xl" />;
   if (isError) {
     return (
@@ -238,35 +268,217 @@ function StudentsPaymentsTable({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2 text-sm">
-        <Badge className="border-border bg-muted text-muted-foreground">{totals.count} students</Badge>
-        <Badge className="border-border bg-muted text-muted-foreground">
-          Due ${totals.due.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-        </Badge>
-        <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-800">
-          Paid ${totals.paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-        </Badge>
+      <p className="text-xs text-muted-foreground">
+        After a payment is recorded, status stays <span className="font-medium text-foreground">paid</span> until
+        the next pay date, then flips to unpaid automatically. Reminder emails go out once a day starting 5 days
+        before the next pay date (when an admin opens Students).
+      </p>
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+        <table className="w-full min-w-[1180px] text-left text-sm">
+          <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2.5 font-medium">Student</th>
+              <th className="px-3 py-2.5 font-medium">Start date</th>
+              <th className="px-3 py-2.5 font-medium">Rate plan</th>
+              <th className="px-3 py-2.5 font-medium">Payment status</th>
+              <th className="px-3 py-2.5 font-medium">How paid</th>
+              <th className="px-3 py-2.5 font-medium">Paid date</th>
+              <th className="px-3 py-2.5 font-medium">Next pay date</th>
+              <th className="px-3 py-2.5 font-medium">Note</th>
+              <th className="px-3 py-2.5 font-medium">Save</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">
+                  No students match this filter.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
+                const id = row.student_id;
+                const draft = drafts[id] ?? toStuDraft(row);
+                const live = livePaymentStatus({
+                  payment_status: draft.status,
+                  next_pay_date: draft.next_pay_date || null,
+                  payment_date: draft.paid_at || null,
+                  joining_date: row.start_date,
+                });
+                return (
+                  <tr key={id} className="border-b border-border/70 last:border-0">
+                    <td className="px-3 py-2">
+                      <p className="font-medium text-foreground">{row.student_name}</p>
+                      <p className="text-xs text-muted-foreground">{row.student_email}</p>
+                      {row.student_status === "inactive" ? (
+                        <Badge className="mt-1 border-destructive/30 bg-destructive/10 text-destructive">
+                          Inactive
+                        </Badge>
+                      ) : null}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                      {formatRosterDate(row.start_date)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Input
+                        className="h-8 w-[110px] tabular-nums"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={draft.rate}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [id]: { ...draft, rate: e.target.value },
+                          }))
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <Select
+                        className="h-8 w-[120px]"
+                        value={draft.status === "partial" ? "unpaid" : draft.status}
+                        onChange={(e) => {
+                          const status = e.target.value;
+                          setDrafts((prev) => {
+                            const next = { ...draft, status };
+                            if (status === "paid") {
+                              const paid = next.paid_at || getTodayCST();
+                              next.paid_at = paid;
+                              next.next_pay_date = nextPayDateAfter(paid, row.start_date);
+                            }
+                            return { ...prev, [id]: next };
+                          });
+                        }}
+                      >
+                        {PAYMENT_STATUSES.filter((s) => s !== "partial").map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </Select>
+                      <Badge className={cn("mt-1 capitalize", statusTone(live))}>{live}</Badge>
+                    </td>
+                    <td className="px-3 py-2">
+                      <MethodSelect
+                        value={draft.payment_method}
+                        onChange={(payment_method) =>
+                          setDrafts((prev) => ({ ...prev, [id]: { ...draft, payment_method } }))
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <Input
+                        className="h-8 w-[140px]"
+                        type="date"
+                        value={draft.paid_at}
+                        onChange={(e) => {
+                          const paid_at = e.target.value;
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [id]: {
+                              ...draft,
+                              paid_at,
+                              next_pay_date: paid_at
+                                ? nextPayDateAfter(paid_at, row.start_date)
+                                : draft.next_pay_date,
+                            },
+                          }));
+                        }}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <Input
+                        className="h-8 w-[140px]"
+                        type="date"
+                        value={draft.next_pay_date}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [id]: { ...draft, next_pay_date: e.target.value },
+                          }))
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <Input
+                        className="h-8 min-w-[140px]"
+                        placeholder="Notes"
+                        value={draft.notes}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [id]: { ...draft, notes: e.target.value },
+                          }))
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={save.isPending && save.variables?.student_id === id}
+                        onClick={() => {
+                          void save.mutateAsync({
+                            student_id: id,
+                            rate: Number(draft.rate) || 0,
+                            status: draft.status,
+                            payment_method: draft.payment_method.trim(),
+                            paid_at: draft.paid_at || null,
+                            next_pay_date: draft.next_pay_date || null,
+                            notes: draft.notes.trim(),
+                          });
+                        }}
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        {save.isPending && save.variables?.student_id === id ? "Saving…" : "Save"}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+        <div className="flex items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+          <DollarSign className="h-3.5 w-3.5" />
+          Start date is read-only. Record a payment here; Students only shows paid vs unpaid.
+        </div>
       </div>
-      <PaymentTable
-        kind="student"
-        rows={rows}
-        drafts={drafts}
-        setDrafts={setDrafts}
-        savingId={save.isPending ? String(save.variables?.student_id ?? "") : ""}
-        onSave={(id) => {
-          const d = drafts[id];
-          if (!d) return;
-          void save.mutateAsync({
-            student_id: id,
-            amount: Number(d.amount) || 0,
-            status: d.status,
-            payment_method: d.payment_method.trim(),
-            paid_at: d.paid_at || null,
-            notes: d.notes.trim(),
-          });
-        }}
-      />
     </div>
+  );
+}
+
+function MethodSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const listed = PAYMENT_METHODS.includes(value as (typeof PAYMENT_METHODS)[number]);
+  return (
+    <>
+      <Select
+        className="h-8 w-[140px]"
+        value={listed ? value : value ? "__custom__" : ""}
+        onChange={(e) => {
+          const v = e.target.value;
+          onChange(v === "__custom__" ? value || "Other" : v);
+        }}
+      >
+        <option value="">Select…</option>
+        {PAYMENT_METHODS.map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+        <option value="__custom__">Custom…</option>
+      </Select>
+      {!listed && value ? (
+        <Input className="mt-1 h-8 w-[140px]" value={value} onChange={(e) => onChange(e.target.value)} />
+      ) : null}
+    </>
   );
 }
 
@@ -283,11 +495,11 @@ function EmployeesSalariesTable({
 }) {
   const { data = [], isLoading, isError, error } = useEmployeeSalaries(year, month);
   const save = useUpsertEmployeeSalary(year, month);
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [drafts, setDrafts] = useState<Record<string, EmpDraft>>({});
 
   useEffect(() => {
-    const next: Record<string, Draft> = {};
-    for (const row of data) next[row.employee_id] = toDraft(row);
+    const next: Record<string, EmpDraft> = {};
+    for (const row of data) next[row.employee_id] = toEmpDraft(row);
     setDrafts(next);
   }, [data]);
 
@@ -307,7 +519,7 @@ function EmployeesSalariesTable({
     let due = 0;
     let paid = 0;
     for (const r of rows) {
-      const d = drafts[r.employee_id] ?? toDraft(r);
+      const d = drafts[r.employee_id] ?? toEmpDraft(r);
       const amt = Number(d.amount) || 0;
       due += amt;
       if (d.status === "paid") paid += amt;
@@ -335,8 +547,7 @@ function EmployeesSalariesTable({
           Paid ${totals.paid.toLocaleString(undefined, { maximumFractionDigits: 2 })}
         </Badge>
       </div>
-      <PaymentTable
-        kind="employee"
+      <EmployeeTable
         rows={rows}
         drafts={drafts}
         setDrafts={setDrafts}
@@ -358,37 +569,16 @@ function EmployeesSalariesTable({
   );
 }
 
-function getPersonFields(kind: "student" | "employee", row: StudentPaymentRow | EmployeeSalaryRow) {
-  if (kind === "student") {
-    const r = row as StudentPaymentRow;
-    return {
-      id: r.student_id,
-      name: r.student_name ?? "—",
-      email: r.student_email ?? "",
-      personStatus: r.student_status ?? "",
-    };
-  }
-  const r = row as EmployeeSalaryRow;
-  return {
-    id: r.employee_id,
-    name: r.employee_name ?? "—",
-    email: r.employee_email ?? "",
-    personStatus: r.employee_status ?? "",
-  };
-}
-
-function PaymentTable({
-  kind,
+function EmployeeTable({
   rows,
   drafts,
   setDrafts,
   savingId,
   onSave,
 }: {
-  kind: "student" | "employee";
-  rows: StudentPaymentRow[] | EmployeeSalaryRow[];
-  drafts: Record<string, Draft>;
-  setDrafts: Dispatch<SetStateAction<Record<string, Draft>>>;
+  rows: EmployeeSalaryRow[];
+  drafts: Record<string, EmpDraft>;
+  setDrafts: Dispatch<SetStateAction<Record<string, EmpDraft>>>;
   savingId: string;
   onSave: (id: string) => void;
 }) {
@@ -397,7 +587,7 @@ function PaymentTable({
       <table className="w-full min-w-[980px] text-left text-sm">
         <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="px-3 py-2.5 font-medium">{kind === "student" ? "Student" : "Employee"}</th>
+            <th className="px-3 py-2.5 font-medium">Employee</th>
             <th className="px-3 py-2.5 font-medium">Amount</th>
             <th className="px-3 py-2.5 font-medium">Paid?</th>
             <th className="px-3 py-2.5 font-medium">How paid</th>
@@ -410,24 +600,18 @@ function PaymentTable({
           {rows.length === 0 ? (
             <tr>
               <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
-                No {kind === "student" ? "students" : "employees"} match this filter.
+                No employees match this filter.
               </td>
             </tr>
           ) : (
             rows.map((row) => {
-              const person = getPersonFields(kind, row);
-              const id = person.id;
-              const draft = drafts[id] ?? toDraft(row);
+              const id = row.employee_id;
+              const draft = drafts[id] ?? toEmpDraft(row);
               return (
                 <tr key={id} className="border-b border-border/70 last:border-0">
                   <td className="px-3 py-2">
-                    <p className="font-medium text-foreground">{person.name}</p>
-                    <p className="text-xs text-muted-foreground">{person.email}</p>
-                    {person.personStatus === "inactive" ? (
-                      <Badge className="mt-1 border-destructive/30 bg-destructive/10 text-destructive">
-                        Inactive
-                      </Badge>
-                    ) : null}
+                    <p className="font-medium text-foreground">{row.employee_name ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">{row.employee_email ?? ""}</p>
                   </td>
                   <td className="px-3 py-2">
                     <Input
@@ -437,10 +621,7 @@ function PaymentTable({
                       step="0.01"
                       value={draft.amount}
                       onChange={(e) =>
-                        setDrafts((prev) => ({
-                          ...prev,
-                          [id]: { ...draft, amount: e.target.value },
-                        }))
+                        setDrafts((prev) => ({ ...prev, [id]: { ...draft, amount: e.target.value } }))
                       }
                     />
                   </td>
@@ -464,47 +645,12 @@ function PaymentTable({
                     <Badge className={cn("mt-1 capitalize", statusTone(draft.status))}>{draft.status}</Badge>
                   </td>
                   <td className="px-3 py-2">
-                    <Select
-                      className="h-8 w-[140px]"
-                      value={
-                        PAYMENT_METHODS.includes(draft.payment_method as (typeof PAYMENT_METHODS)[number])
-                          ? draft.payment_method
-                          : draft.payment_method
-                            ? "__custom__"
-                            : ""
+                    <MethodSelect
+                      value={draft.payment_method}
+                      onChange={(payment_method) =>
+                        setDrafts((prev) => ({ ...prev, [id]: { ...draft, payment_method } }))
                       }
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setDrafts((prev) => ({
-                          ...prev,
-                          [id]: {
-                            ...draft,
-                            payment_method: v === "__custom__" ? draft.payment_method || "Other" : v,
-                          },
-                        }));
-                      }}
-                    >
-                      <option value="">Select…</option>
-                      {PAYMENT_METHODS.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom…</option>
-                    </Select>
-                    {!PAYMENT_METHODS.includes(draft.payment_method as (typeof PAYMENT_METHODS)[number]) &&
-                    draft.payment_method ? (
-                      <Input
-                        className="mt-1 h-8 w-[140px]"
-                        value={draft.payment_method}
-                        onChange={(e) =>
-                          setDrafts((prev) => ({
-                            ...prev,
-                            [id]: { ...draft, payment_method: e.target.value },
-                          }))
-                        }
-                      />
-                    ) : null}
+                    />
                   </td>
                   <td className="px-3 py-2">
                     <Input
@@ -512,10 +658,7 @@ function PaymentTable({
                       type="date"
                       value={draft.paid_at}
                       onChange={(e) =>
-                        setDrafts((prev) => ({
-                          ...prev,
-                          [id]: { ...draft, paid_at: e.target.value },
-                        }))
+                        setDrafts((prev) => ({ ...prev, [id]: { ...draft, paid_at: e.target.value } }))
                       }
                     />
                   </td>
@@ -525,20 +668,12 @@ function PaymentTable({
                       placeholder="Notes"
                       value={draft.notes}
                       onChange={(e) =>
-                        setDrafts((prev) => ({
-                          ...prev,
-                          [id]: { ...draft, notes: e.target.value },
-                        }))
+                        setDrafts((prev) => ({ ...prev, [id]: { ...draft, notes: e.target.value } }))
                       }
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={savingId === id}
-                      onClick={() => onSave(id)}
-                    >
+                    <Button type="button" size="sm" disabled={savingId === id} onClick={() => onSave(id)}>
                       <Save className="h-3.5 w-3.5" />
                       {savingId === id ? "Saving…" : "Save"}
                     </Button>
@@ -549,10 +684,6 @@ function PaymentTable({
           )}
         </tbody>
       </table>
-      <div className="flex items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
-        <DollarSign className="h-3.5 w-3.5" />
-        Amounts are per person for this month. Save each row after editing.
-      </div>
     </div>
   );
 }

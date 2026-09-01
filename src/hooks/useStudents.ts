@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { isMissingColumnError } from "@/lib/employees";
 import type { Student } from "@/lib/students";
 
+const SELECT_BILLING =
+  "id, name, email, phone, program, status, assigned_to, last_assigned_to, inactive_at, inactive_reason, user_id, applied_date, documents_submitted, documents_total, created_at, joining_date, payment_status, payment_amount, payment_date, payment_method, payment_notes, next_pay_date, payment_reminder_sent_on, last_active_at";
 const SELECT_FULL =
   "id, name, email, phone, program, status, assigned_to, last_assigned_to, inactive_at, inactive_reason, user_id, applied_date, documents_submitted, documents_total, created_at, joining_date, payment_status, payment_amount, payment_date, payment_method, payment_notes, last_active_at";
 const SELECT_BASE =
@@ -12,14 +14,19 @@ export function useStudents() {
   return useQuery({
     queryKey: ["students"],
     queryFn: async () => {
-      const full = await supabase.from("students").select(SELECT_FULL).order("name");
-      if (!full.error) return (full.data ?? []) as Student[];
-      if (isMissingColumnError(full.error)) {
-        const base = await supabase.from("students").select(SELECT_BASE).order("name");
-        if (base.error) throw base.error;
-        return (base.data ?? []) as Student[];
+      const billing = await supabase.from("students").select(SELECT_BILLING).order("name");
+      if (!billing.error) return (billing.data ?? []) as Student[];
+      if (isMissingColumnError(billing.error)) {
+        const full = await supabase.from("students").select(SELECT_FULL).order("name");
+        if (!full.error) return (full.data ?? []) as Student[];
+        if (isMissingColumnError(full.error)) {
+          const base = await supabase.from("students").select(SELECT_BASE).order("name");
+          if (base.error) throw base.error;
+          return (base.data ?? []) as Student[];
+        }
+        throw full.error;
       }
-      throw full.error;
+      throw billing.error;
     },
   });
 }

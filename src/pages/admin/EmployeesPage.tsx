@@ -27,9 +27,10 @@ import { useEmployees } from "@/hooks/useEmployees";
 import { useStudents } from "@/hooks/useStudents";
 import { useWelcomeEmailLogs } from "@/hooks/useEmailLogs";
 import { useEmployeeAppsToday } from "@/hooks/useEmployeeAppsToday";
-import { employeeEffectiveDailyTarget, type Employee } from "@/lib/employees";
+import { employeeEffectiveDailyTarget, employeeStartDate, type Employee } from "@/lib/employees";
 import { sendWelcomeCredentials } from "@/lib/sendWelcomeCredentials";
 import { supabase } from "@/integrations/supabase/client";
+import { formatRosterDate } from "@/lib/timezone";
 import {
   PAGE_SIZE,
   getInitials,
@@ -114,6 +115,9 @@ export default function AdminEmployeesPage({
           break;
         case "assigned":
           cmp = aAssigned - bAssigned;
+          break;
+        case "startDate":
+          cmp = (employeeStartDate(a) || "").localeCompare(employeeStartDate(b) || "");
           break;
         default:
           cmp = a.name.localeCompare(b.name);
@@ -308,10 +312,11 @@ export default function AdminEmployeesPage({
 
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <Th label="Employee" onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir} />
+                  <Th label="Start Date" onClick={() => toggleSort("startDate")} active={sortKey === "startDate"} dir={sortDir} />
                   <Th label="Category" onClick={() => toggleSort("category")} active={sortKey === "category"} dir={sortDir} />
                   <Th label="Assigned" onClick={() => toggleSort("assigned")} active={sortKey === "assigned"} dir={sortDir} />
                   <Th label="Apps today" onClick={() => toggleSort("appsToday")} active={sortKey === "appsToday"} dir={sortDir} />
@@ -325,7 +330,7 @@ export default function AdminEmployeesPage({
                 {isLoading
                   ? Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="border-b border-border/60">
-                        <td className="px-3 py-3" colSpan={8}>
+                        <td className="px-3 py-3" colSpan={9}>
                           <Skeleton className="h-10 w-full" />
                         </td>
                       </tr>
@@ -333,7 +338,7 @@ export default function AdminEmployeesPage({
                   : null}
                 {!isLoading && pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
+                    <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">
                       No employees match your filters.
                     </td>
                   </tr>
@@ -363,6 +368,9 @@ export default function AdminEmployeesPage({
                             <p className="truncate text-xs text-muted-foreground">{emp.email}</p>
                           </div>
                         </button>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
+                        {formatRosterDate(employeeStartDate(emp))}
                       </td>
                       <td className="px-3 py-3 text-muted-foreground">{emp.job_role_category || "—"}</td>
                       <td className="px-3 py-3 tabular-nums text-muted-foreground">

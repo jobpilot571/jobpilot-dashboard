@@ -1,12 +1,12 @@
 export type StudentStatusFilter = "all" | "active" | "pending" | "inactive";
 export type StudentSortKey =
   | "name"
+  | "startDate"
   | "program"
   | "assigned"
   | "apps"
   | "interviews"
-  | "payment"
-  | "status";
+  | "payment";
 
 export const STUDENT_PAGE_SIZE = 10;
 

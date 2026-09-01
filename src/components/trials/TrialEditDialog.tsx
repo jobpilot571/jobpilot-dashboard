@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { isMissingColumnError, type Employee } from "@/lib/employees";
+import { nextPayDateAfter } from "@/lib/billing";
+import { getTodayCST } from "@/lib/timezone";
 import type { TrialStudent } from "@/hooks/useTrialStudents";
 import {
   FOLLOW_UP_STATUSES,
@@ -84,13 +86,18 @@ export function TrialEditDialog({
       if (status === "converted") {
         const { data: matched } = await supabase
           .from("students")
-          .select("id, email")
+          .select("id, email, joining_date, applied_date")
           .ilike("email", trial.email)
           .maybeSingle();
         if (matched?.id) {
+          const paid = getTodayCST();
           const { error: payErr } = await supabase
             .from("students")
-            .update({ payment_status: "paid" })
+            .update({
+              payment_status: "paid",
+              payment_date: paid,
+              next_pay_date: nextPayDateAfter(paid, matched.joining_date || matched.applied_date || paid),
+            })
             .eq("id", matched.id);
           if (payErr && !isMissingColumnError(payErr)) {
             toast.warning("Trial converted, but student payment_status could not be updated.");
@@ -102,6 +109,7 @@ export function TrialEditDialog({
       void queryClient.invalidateQueries({ queryKey: ["trial-students"] });
       void queryClient.invalidateQueries({ queryKey: ["admin-dashboard-stats"] });
       void queryClient.invalidateQueries({ queryKey: ["students"] });
+      void queryClient.invalidateQueries({ queryKey: ["student-billing"] });
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update trial.");

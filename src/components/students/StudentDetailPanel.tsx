@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useStudentApplications } from "@/hooks/useStudentAppStats";
 import type { Employee } from "@/lib/employees";
 import { getStudentBucket, type Student } from "@/lib/students";
+import { livePaymentStatus } from "@/lib/billing";
 import { getInitials } from "@/features/employees/constants";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -107,7 +108,7 @@ export function StudentDetailPanel({
                 {bucket === "inactive" ? "Inactive" : bucket === "unassigned" ? "Pending / Unassigned" : "Active"}
               </Badge>
               <Badge className="border-border bg-muted text-muted-foreground">
-                Payment: {student.payment_status ?? "unpaid"}
+                Payment: {livePaymentStatus(student)}
               </Badge>
             </div>
           </div>
@@ -127,10 +128,6 @@ export function StudentDetailPanel({
             }
           />
           <Meta label="Login linked" value={student.user_id ? "Yes" : "No"} />
-          {student.payment_amount != null ? (
-            <Meta label="Payment amount" value={`$${Number(student.payment_amount).toFixed(2)}`} />
-          ) : null}
-          {student.payment_method ? <Meta label="Payment method" value={student.payment_method} /> : null}
         </div>
 
         {student.inactive_reason ? (
