@@ -68,13 +68,13 @@ export function StudentFormDialog({
   };
 
   const persistJoining = async (studentId: string, opts?: { seedBilling?: boolean }) => {
-    const payload: Record<string, string | null> = {
-      joining_date: joiningDate || null,
-    };
-    if (opts?.seedBilling) {
-      payload.next_pay_date = joiningDate || null;
-      payload.payment_status = "unpaid";
-    }
+    const payload = opts?.seedBilling
+      ? {
+          joining_date: joiningDate || null,
+          next_pay_date: joiningDate || null,
+          payment_status: "unpaid",
+        }
+      : { joining_date: joiningDate || null };
     const { error } = await supabase.from("students").update(payload).eq("id", studentId);
     if (error && !isMissingColumnError(error)) throw error;
   };

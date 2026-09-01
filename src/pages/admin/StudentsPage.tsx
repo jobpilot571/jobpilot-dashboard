@@ -746,11 +746,9 @@ function PaymentBadge({ status }: { status?: string | null }) {
   const cls =
     s === "paid"
       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-      : s === "partial"
-        ? "border-sky-500/30 bg-sky-500/10 text-sky-700"
-        : s === "waived" || s === "n/a"
-          ? "border-border bg-muted text-muted-foreground"
-          : "border-amber-500/30 bg-amber-500/10 text-amber-700";
+      : s === "waived" || s === "n/a"
+        ? "border-border bg-muted text-muted-foreground"
+        : "border-amber-500/30 bg-amber-500/10 text-amber-700";
   return <Badge className={cls}>{s}</Badge>;
 }
 

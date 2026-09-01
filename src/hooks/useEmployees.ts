@@ -8,7 +8,7 @@ export function useEmployees() {
     queryFn: async () =>
       withEmployeeSelectFallback(async (cols) => {
         const res = await supabase.from("employees").select(cols).order("name");
-        return { data: (res.data ?? []) as Employee[], error: res.error };
+        return { data: (res.data ?? []) as unknown as Employee[], error: res.error };
       }),
   });
 }
