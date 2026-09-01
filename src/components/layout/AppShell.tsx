@@ -198,7 +198,7 @@ function AppShellInner({
   return (
     <div className="flex min-h-screen bg-background">
       {effectiveSidebarOpen ? (
-        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col bg-sidebar text-sidebar-foreground md:flex">
+        <aside className="sticky top-0 hidden h-screen w-52 shrink-0 flex-col bg-sidebar text-sidebar-foreground md:flex">
           <SidebarNav items={items} onCollapse={() => setSidebarOpen(false)} />
         </aside>
       ) : null}
@@ -211,7 +211,7 @@ function AppShellInner({
             aria-label="Close menu"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative z-10 flex h-full w-[min(18rem,88vw)] flex-col bg-sidebar text-sidebar-foreground shadow-xl">
+          <aside className="relative z-10 flex h-full w-[min(14rem,85vw)] flex-col bg-sidebar text-sidebar-foreground shadow-xl">
             <div className="absolute right-2 top-3">
               <button
                 type="button"
