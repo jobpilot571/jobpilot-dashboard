@@ -5,6 +5,7 @@ export type StudentSortKey =
   | "program"
   | "assigned"
   | "apps"
+  | "todayApps"
   | "interviews"
   | "payment";
 

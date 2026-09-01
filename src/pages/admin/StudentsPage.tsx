@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  CalendarDays,
   KeyRound,
   Mail,
   MoreHorizontal,
@@ -29,8 +30,8 @@ import { useWelcomeEmailLogs } from "@/hooks/useEmailLogs";
 import { useStudentAppStats } from "@/hooks/useStudentAppStats";
 import { getStudentBucket, studentStartDate, type Student } from "@/lib/students";
 import { livePaymentStatus } from "@/lib/billing";
-import { formatRosterDate } from "@/lib/timezone";
 import { sendWelcomeCredentials } from "@/lib/sendWelcomeCredentials";
+import { isMissingColumnError } from "@/lib/employees";
 import { runPaymentReminders } from "@/hooks/usePayments";
 import { supabase } from "@/integrations/supabase/client";
 import { getInitials } from "@/features/employees/constants";
@@ -143,6 +144,8 @@ export default function AdminStudentsPage() {
     list = [...list].sort((a, b) => {
       const aApps = statsMap[a.id]?.appCount ?? 0;
       const bApps = statsMap[b.id]?.appCount ?? 0;
+      const aToday = statsMap[a.id]?.todayCount ?? 0;
+      const bToday = statsMap[b.id]?.todayCount ?? 0;
       const aInt = statsMap[a.id]?.interviewCount ?? 0;
       const bInt = statsMap[b.id]?.interviewCount ?? 0;
       let cmp = 0;
@@ -157,6 +160,9 @@ export default function AdminStudentsPage() {
           break;
         case "apps":
           cmp = aApps - bApps;
+          break;
+        case "todayApps":
+          cmp = aToday - bToday;
           break;
         case "interviews":
           cmp = aInt - bInt;
@@ -183,7 +189,7 @@ export default function AdminStudentsPage() {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
-      setSortDir(key === "apps" || key === "interviews" || key === "startDate" ? "desc" : "asc");
+      setSortDir(key === "apps" || key === "todayApps" || key === "interviews" || key === "startDate" ? "desc" : "asc");
     }
   };
 
@@ -193,6 +199,30 @@ export default function AdminStudentsPage() {
     void queryClient.invalidateQueries({ queryKey: ["admin-dashboard-stats"] });
     void queryClient.invalidateQueries({ queryKey: ["student-app-stats"] });
     void queryClient.invalidateQueries({ queryKey: ["employee-apps-today"] });
+    void queryClient.invalidateQueries({ queryKey: ["student-billing"] });
+  };
+
+  const saveStartDate = async (student: Student, value: string) => {
+    const prev = studentStartDate(student);
+    if ((prev || "") === value) return;
+    setBusy(true);
+    try {
+      const payload: {
+        joining_date: string | null;
+        next_pay_date?: string | null;
+      } = { joining_date: value || null };
+      if (!student.payment_date && (!student.next_pay_date || student.next_pay_date === prev)) {
+        payload.next_pay_date = value || null;
+      }
+      const { error } = await supabase.from("students").update(payload).eq("id", student.id);
+      if (error && !isMissingColumnError(error)) throw error;
+      toast.success("Start date updated.");
+      invalidateAll();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update start date.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const setActiveStatus = async (student: Student, action: "active" | "inactive") => {
@@ -346,7 +376,7 @@ export default function AdminStudentsPage() {
 
   return (
     <AppShell role="admin">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight">Students</h1>
@@ -433,25 +463,25 @@ export default function AdminStudentsPage() {
 
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] text-left text-sm">
-              <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+            <table className="w-full table-fixed text-left text-sm">
+              <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <Th label="Student" onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir} />
-                  <Th label="Start Date" onClick={() => toggleSort("startDate")} active={sortKey === "startDate"} dir={sortDir} />
-                  <Th label="Program" onClick={() => toggleSort("program")} active={sortKey === "program"} dir={sortDir} />
-                  <Th label="Assigned to" onClick={() => toggleSort("assigned")} active={sortKey === "assigned"} dir={sortDir} />
-                  <Th label="Apps" onClick={() => toggleSort("apps")} active={sortKey === "apps"} dir={sortDir} />
-                  <Th label="Interviews" onClick={() => toggleSort("interviews")} active={sortKey === "interviews"} dir={sortDir} />
-                  <Th label="Payment" onClick={() => toggleSort("payment")} active={sortKey === "payment"} dir={sortDir} />
-                  <th className="px-3 py-3 font-medium">Welcome email</th>
-                  <th className="px-3 py-3 font-medium">Actions</th>
+                  <Th className="w-[22%]" label="Student" onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir} />
+                  <Th className="w-[9.5rem]" label="Start date" onClick={() => toggleSort("startDate")} active={sortKey === "startDate"} dir={sortDir} />
+                  <Th className="w-[12%]" label="Program" onClick={() => toggleSort("program")} active={sortKey === "program"} dir={sortDir} />
+                  <Th className="w-[11%]" label="Assigned" onClick={() => toggleSort("assigned")} active={sortKey === "assigned"} dir={sortDir} />
+                  <Th className="w-[4.25rem]" label="Apps" onClick={() => toggleSort("apps")} active={sortKey === "apps"} dir={sortDir} />
+                  <Th className="w-[5.75rem]" label="Today apps" onClick={() => toggleSort("todayApps")} active={sortKey === "todayApps"} dir={sortDir} />
+                  <Th className="w-[3.75rem]" label="Int." onClick={() => toggleSort("interviews")} active={sortKey === "interviews"} dir={sortDir} />
+                  <Th className="w-[5.5rem]" label="Payment" onClick={() => toggleSort("payment")} active={sortKey === "payment"} dir={sortDir} />
+                  <th className="w-12 px-1.5 py-2 font-medium"> </th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading
                   ? Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="border-b border-border/60">
-                        <td className="px-3 py-3" colSpan={9}>
+                        <td className="px-2 py-2.5" colSpan={9}>
                           <Skeleton className="h-10 w-full" />
                         </td>
                       </tr>
@@ -469,64 +499,83 @@ export default function AdminStudentsPage() {
                   const stats = statsMap[stu.id] ?? { appCount: 0, interviewCount: 0, todayCount: 0 };
                   const log = stu.user_id ? emailLogs.data?.[stu.user_id] : null;
                   const start = studentStartDate(stu);
+                  const startValue = (start || "").slice(0, 10);
                   const statusTone =
                     bucket === "inactive" ? "inactive" : bucket === "unassigned" ? "pending" : "active";
 
                   return (
                     <tr key={stu.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-2">
                         <Link
                           to={`/admin/students/${stu.id}`}
-                          className="flex items-center gap-3 text-left hover:opacity-90"
+                          className="flex min-w-0 items-center gap-2 text-left hover:opacity-90"
                         >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
                             {getInitials(stu.name)}
                           </div>
                           <div className="min-w-0">
-                            <p className="flex items-center gap-1.5 font-medium text-primary hover:underline">
+                            <p className="flex min-w-0 items-center gap-1.5 font-medium text-primary hover:underline">
                               <StatusDot tone={statusTone} pulse={statusTone === "active"} />
                               <span className="truncate">{stu.name}</span>
                             </p>
-                            <p className="truncate text-xs text-muted-foreground">{stu.email}</p>
+                            <p className="truncate text-[11px] text-muted-foreground">{stu.email}</p>
                           </div>
                         </Link>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
-                        {formatRosterDate(start)}
+                      <td className="px-1.5 py-2">
+                        <Input
+                          type="date"
+                          aria-label={`Start date for ${stu.name}`}
+                          className="h-8 w-[8.6rem] px-1.5 text-xs"
+                          value={startValue}
+                          disabled={busy}
+                          onChange={(e) => void saveStartDate(stu, e.target.value)}
+                        />
                       </td>
-                      <td className="px-3 py-3 text-muted-foreground">{stu.program || "—"}</td>
-                      <td className="px-3 py-3 text-muted-foreground">
+                      <td className="truncate px-2 py-2 text-muted-foreground" title={stu.program || undefined}>
+                        {stu.program || "—"}
+                      </td>
+                      <td
+                        className="truncate px-2 py-2 text-muted-foreground"
+                        title={stu.assigned_to ? empName[stu.assigned_to] || undefined : "Unassigned"}
+                      >
                         {stu.assigned_to ? empName[stu.assigned_to] || "—" : "Unassigned"}
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-baseline gap-2 whitespace-nowrap">
-                          <span className="inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
-                            {stats.appCount}
-                          </span>
-                          <span className="text-[11px] tabular-nums text-muted-foreground">
-                            {stats.todayCount} today
-                          </span>
-                        </div>
+                      <td className="px-1.5 py-2">
+                        <span className="inline-flex rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-primary">
+                          {stats.appCount}
+                        </span>
                       </td>
-                      <td className="px-3 py-3 tabular-nums text-muted-foreground">{stats.interviewCount}</td>
-                      <td className="px-3 py-3">
+                      <td className="px-1.5 py-2">
+                        <span className="inline-flex rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
+                          {stats.todayCount}
+                        </span>
+                      </td>
+                      <td className="px-1 py-2 text-center tabular-nums text-muted-foreground">
+                        {stats.interviewCount}
+                      </td>
+                      <td className="px-1.5 py-2">
                         <PaymentBadge status={livePaymentStatus(stu)} />
                       </td>
-                      <td className="px-3 py-3">
-                        <EmailStatusBadge log={log} />
-                      </td>
-                      <td className="relative px-3 py-3">
+                      <td className="relative px-1 py-2">
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
+                          className="h-8 w-8"
                           onClick={() => setMenuId((id) => (id === stu.id ? null : stu.id))}
                           aria-label="Actions"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                         {menuId === stu.id ? (
-                          <div className="absolute right-3 z-20 mt-1 w-56 rounded-lg border border-border bg-card p-1 shadow-lg">
+                          <div className="absolute right-1 z-20 mt-1 w-60 rounded-lg border border-border bg-card p-1 shadow-lg">
+                            <div className="border-b border-border px-2.5 py-2">
+                              <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Welcome email
+                              </p>
+                              <EmailStatusBadge log={log} />
+                            </div>
                             <MenuItem
                               icon={UserCheck}
                               label="View profile & apps"
@@ -538,6 +587,15 @@ export default function AdminStudentsPage() {
                             <MenuItem
                               icon={Pencil}
                               label="Edit"
+                              onClick={() => {
+                                setEditing(stu);
+                                setFormOpen(true);
+                                setMenuId(null);
+                              }}
+                            />
+                            <MenuItem
+                              icon={CalendarDays}
+                              label="Edit start date"
                               onClick={() => {
                                 setEditing(stu);
                                 setFormOpen(true);
@@ -749,7 +807,7 @@ function PaymentBadge({ status }: { status?: string | null }) {
       : s === "waived" || s === "n/a"
         ? "border-border bg-muted text-muted-foreground"
         : "border-amber-500/30 bg-amber-500/10 text-amber-700";
-  return <Badge className={cls}>{s}</Badge>;
+  return <Badge className={cn("px-1.5", cls)}>{s}</Badge>;
 }
 
 function Th({
@@ -757,15 +815,17 @@ function Th({
   onClick,
   active,
   dir,
+  className,
 }: {
   label: string;
   onClick: () => void;
   active: boolean;
   dir: "asc" | "desc";
+  className?: string;
 }) {
   return (
-    <th className="px-3 py-3 font-medium">
-      <button type="button" onClick={onClick} className="inline-flex items-center gap-1 hover:text-foreground">
+    <th className={cn("px-1.5 py-2 font-medium", className)} title={label === "Int." ? "Interviews" : undefined}>
+      <button type="button" onClick={onClick} className="inline-flex items-center gap-0.5 hover:text-foreground">
         {label}
         {active ? <span className="text-[10px]">{dir === "asc" ? "▲" : "▼"}</span> : null}
       </button>

@@ -70,11 +70,12 @@ export default function EmployeeStudentsPage() {
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">Student</th>
-                <th className="px-4 py-3 font-medium">Start Date</th>
-                <th className="px-4 py-3 font-medium">Program</th>
-                <th className="px-4 py-3 font-medium">Apps</th>
-                <th className="px-4 py-3 font-medium">Interviews</th>
+                <th className="px-3 py-3 font-medium">Student</th>
+                <th className="px-3 py-3 font-medium">Start Date</th>
+                <th className="px-3 py-3 font-medium">Program</th>
+                <th className="px-3 py-3 font-medium">Apps</th>
+                <th className="px-3 py-3 font-medium">Today</th>
+                <th className="px-3 py-3 font-medium">Interviews</th>
                 <th className="px-4 py-3 font-medium">Documents</th>
                 <th className="px-4 py-3 font-medium" />
               </tr>
@@ -83,7 +84,7 @@ export default function EmployeeStudentsPage() {
               {isLoading || empLoading
                 ? Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i}>
-                      <td colSpan={7} className="px-4 py-3">
+                      <td colSpan={8} className="px-4 py-3">
                         <Skeleton className="h-8 w-full" />
                       </td>
                     </tr>
@@ -115,14 +116,8 @@ export default function EmployeeStudentsPage() {
                           {formatRosterDate(studentStartDate(s))}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">{s.program || "—"}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-baseline gap-2 whitespace-nowrap">
-                            <span className="tabular-nums font-medium">{stats?.appCount ?? 0}</span>
-                            <span className="text-[11px] tabular-nums text-muted-foreground">
-                              {stats?.todayCount ?? 0} today
-                            </span>
-                          </div>
-                        </td>
+                        <td className="px-4 py-3 tabular-nums font-medium">{stats?.appCount ?? 0}</td>
+                        <td className="px-4 py-3 tabular-nums">{stats?.todayCount ?? 0}</td>
                         <td className="px-4 py-3 tabular-nums">{stats?.interviewCount ?? 0}</td>
                         <td className="px-4 py-3">
                           <div className="flex min-w-[120px] flex-col gap-1">
@@ -145,7 +140,7 @@ export default function EmployeeStudentsPage() {
                   })}
               {!isLoading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                     {accessAll
                       ? "No active students match your search."
                       : "No assigned students match your search."}
