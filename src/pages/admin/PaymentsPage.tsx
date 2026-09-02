@@ -1,31 +1,33 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { DollarSign, GraduationCap, Save, Users } from "lucide-react";
+import { ClipboardList, DollarSign, GraduationCap, History, Save, Users } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select } from "@/components/ui/dialog";
+import { Dialog, Select } from "@/components/ui/dialog";
 import {
   runPaymentReminders,
   useEmployeeSalaries,
-  useStudentBilling,
+  useStudentMonthPayments,
+  useStudentPaymentHistory,
+  useStudentPaymentRecords,
   useUpsertEmployeeSalary,
-  useUpsertStudentBilling,
+  useUpsertStudentMonthPayment,
   type EmployeeSalaryRow,
-  type StudentBillingRow,
+  type StudentMonthRow,
+  type StudentPaymentRecord,
 } from "@/hooks/usePayments";
 import {
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
   type PaymentStatus,
 } from "@/lib/constants";
-import { nextPayDateAfter } from "@/lib/billing";
 import { formatRosterDate, getTodayCST } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 
-type Tab = "students" | "employees";
+type Tab = "students" | "employees" | "records";
 
 const MONTHS = [
   "January",
@@ -47,6 +49,16 @@ function periodFromToday() {
   return { year: y, month: m };
 }
 
+function payPeriodLabel(year: number, month: number) {
+  return `${MONTHS[month - 1]} ${year} pay`;
+}
+
+function statusTone(status: string) {
+  if (status === "paid") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-800";
+  if (status === "waived" || status === "n/a") return "border-sky-500/30 bg-sky-500/10 text-sky-800";
+  return "border-destructive/30 bg-destructive/10 text-destructive";
+}
+
 type EmpDraft = {
   amount: string;
   status: string;
@@ -60,7 +72,6 @@ type StuDraft = {
   status: string;
   payment_method: string;
   paid_at: string;
-  next_pay_date: string;
   notes: string;
 };
 
@@ -80,13 +91,12 @@ function toEmpDraft(row: {
   };
 }
 
-function toStuDraft(row: StudentBillingRow): StuDraft {
+function toStuDraft(row: StudentMonthRow): StuDraft {
   return {
     rate: String(row.rate ?? 0),
     status: row.status || "unpaid",
     payment_method: row.payment_method || "",
     paid_at: row.paid_at || "",
-    next_pay_date: row.next_pay_date || "",
     notes: row.notes || "",
   };
 }
@@ -99,6 +109,7 @@ export default function AdminPaymentsPage() {
   const [showInactive, setShowInactive] = useState(false);
   const [search, setSearch] = useState("");
   const [reminding, setReminding] = useState(false);
+  const [recordsAllMonths, setRecordsAllMonths] = useState(true);
 
   const years = useMemo(() => {
     const list: number[] = [];
@@ -114,56 +125,65 @@ export default function AdminPaymentsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Finance</p>
             <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight">Payments</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Admin-only billing: rate, how they paid, paid date, and next pay date. Start date comes from
-              Students and cannot be edited here.
+              Active students only. Each month is saved as its own payment record.
             </p>
           </div>
-          {tab === "employees" ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Select
-                className="w-[140px]"
-                value={String(month)}
-                onChange={(e) => setMonth(Number(e.target.value))}
-              >
-                {MONTHS.map((label, i) => (
-                  <option key={label} value={i + 1}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-              <Select className="w-[100px]" value={String(year)} onChange={(e) => setYear(Number(e.target.value))}>
-                {years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={reminding}
-              onClick={() => {
-                setReminding(true);
-                void runPaymentReminders()
-                  .then((r) => {
-                    if (r.error) throw new Error(r.error);
-                    if (r.sent > 0) {
-                      toast.success(`Sent ${r.sent} payment reminder${r.sent === 1 ? "" : "s"}.`);
-                    } else {
-                      toast.message("No reminders due today (or already sent).");
-                    }
-                  })
-                  .catch((err: Error) => {
-                    toast.error(err.message || "Reminder send failed.");
-                  })
-                  .finally(() => setReminding(false));
-              }}
+          <div className="flex flex-wrap items-center gap-2">
+            {tab === "records" ? (
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={recordsAllMonths}
+                  onChange={(e) => setRecordsAllMonths(e.target.checked)}
+                />
+                All months
+              </label>
+            ) : null}
+            <Select
+              className="w-[140px]"
+              value={String(month)}
+              disabled={tab === "records" && recordsAllMonths}
+              onChange={(e) => setMonth(Number(e.target.value))}
             >
-              {reminding ? "Sending…" : "Send due reminders"}
-            </Button>
-          )}
+              {MONTHS.map((label, i) => (
+                <option key={label} value={i + 1}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+            <Select className="w-[100px]" value={String(year)} onChange={(e) => setYear(Number(e.target.value))}>
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </Select>
+            {tab === "students" ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={reminding}
+                onClick={() => {
+                  setReminding(true);
+                  void runPaymentReminders()
+                    .then((r) => {
+                      if (r.error) throw new Error(r.error);
+                      if (r.sent > 0) {
+                        toast.success(`Sent ${r.sent} payment reminder${r.sent === 1 ? "" : "s"}.`);
+                      } else {
+                        toast.message("No reminders due today (or already sent).");
+                      }
+                    })
+                    .catch((err: Error) => {
+                      toast.error(err.message || "Reminder send failed.");
+                    })
+                    .finally(() => setReminding(false));
+                }}
+              >
+                {reminding ? "Sending…" : "Send due reminders"}
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -172,6 +192,7 @@ export default function AdminPaymentsPage() {
               [
                 ["students", "Students", GraduationCap],
                 ["employees", "Employees", Users],
+                ["records", "Records", ClipboardList],
               ] as const
             ).map(([id, label, Icon]) => (
               <button
@@ -196,24 +217,33 @@ export default function AdminPaymentsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <label className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={showInactive}
-              onChange={(e) => setShowInactive(e.target.checked)}
-            />
-            Show inactive
-          </label>
+          {tab === "employees" ? (
+            <label className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)}
+              />
+              Show inactive
+            </label>
+          ) : null}
         </div>
 
         {tab === "students" ? (
-          <StudentsBillingTable search={search} showInactive={showInactive} />
-        ) : (
+          <StudentsBillingTable year={year} month={month} search={search} />
+        ) : tab === "employees" ? (
           <EmployeesSalariesTable
             year={year}
             month={month}
             search={search}
             showInactive={showInactive}
+          />
+        ) : (
+          <PaymentRecordsTable
+            year={year}
+            month={month}
+            allMonths={recordsAllMonths}
+            search={search}
           />
         )}
       </div>
@@ -222,15 +252,18 @@ export default function AdminPaymentsPage() {
 }
 
 function StudentsBillingTable({
+  year,
+  month,
   search,
-  showInactive,
 }: {
+  year: number;
+  month: number;
   search: string;
-  showInactive: boolean;
 }) {
-  const { data = [], isLoading, isError, error } = useStudentBilling();
-  const save = useUpsertStudentBilling();
+  const { data = [], isLoading, isError, error } = useStudentMonthPayments(year, month);
+  const save = useUpsertStudentMonthPayment(year, month);
   const [drafts, setDrafts] = useState<Record<string, StuDraft>>({});
+  const [historyStudent, setHistoryStudent] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     const next: Record<string, StuDraft> = {};
@@ -241,14 +274,13 @@ function StudentsBillingTable({
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return data.filter((r) => {
-      if (!showInactive && r.student_status === "inactive") return false;
       if (!q) return true;
       return (
         (r.student_name || "").toLowerCase().includes(q) ||
         (r.student_email || "").toLowerCase().includes(q)
       );
     });
-  }, [data, search, showInactive]);
+  }, [data, search]);
 
   if (isLoading) return <Skeleton className="h-64 w-full rounded-xl" />;
   if (isError) {
@@ -261,31 +293,31 @@ function StudentsBillingTable({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        After a payment is recorded, status stays <span className="font-medium text-foreground">paid</span> until
-        the next pay date, then flips to unpaid automatically. Reminder emails go out once a day starting 5 days
-        before the next pay date (when an admin opens Students).
-      </p>
+      <div>
+        <h2 className="font-display text-lg font-semibold tracking-tight">{payPeriodLabel(year, month)}</h2>
+        <p className="text-xs text-muted-foreground">
+          Save each row to keep a record for this month. Open Records to review every saved month.
+        </p>
+      </div>
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
         <table className="w-full table-fixed text-left text-sm">
           <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="w-[16%] px-2 py-2 font-medium">Student</th>
+              <th className="w-[18%] px-2 py-2 font-medium">Student</th>
               <th className="w-[7.5rem] px-1.5 py-2 font-medium">Start date</th>
               <th className="w-[5.5rem] px-1.5 py-2 font-medium">Rate</th>
               <th className="w-[6.5rem] px-1.5 py-2 font-medium">Status</th>
               <th className="w-[7rem] px-1.5 py-2 font-medium">How paid</th>
               <th className="w-[7.25rem] px-1.5 py-2 font-medium">Paid date</th>
-              <th className="w-[7.25rem] px-1.5 py-2 font-medium">Next pay</th>
               <th className="px-1.5 py-2 font-medium">Note</th>
-              <th className="w-10 px-1 py-2 font-medium"> </th>
+              <th className="w-20 px-1 py-2 font-medium"> </th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">
-                  No students match this filter.
+                <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
+                  No active students match this filter.
                 </td>
               </tr>
             ) : (
@@ -298,11 +330,11 @@ function StudentsBillingTable({
                     <td className="min-w-0 px-2 py-1.5">
                       <p className="truncate font-medium text-foreground">{row.student_name}</p>
                       <p className="truncate text-[11px] text-muted-foreground">{row.student_email}</p>
-                      {row.student_status === "inactive" ? (
-                        <Badge className="mt-0.5 border-destructive/30 bg-destructive/10 text-destructive">
-                          Inactive
-                        </Badge>
-                      ) : null}
+                      {row.recorded ? (
+                        <p className="text-[10px] font-medium text-emerald-700">Recorded this month</p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground">Not recorded yet</p>
+                      )}
                     </td>
                     <td className="px-1.5 py-1.5 text-xs tabular-nums text-muted-foreground">
                       {formatRosterDate(row.start_date)}
@@ -330,11 +362,7 @@ function StudentsBillingTable({
                           const status = e.target.value;
                           setDrafts((prev) => {
                             const next = { ...draft, status };
-                            if (status === "paid") {
-                              const paid = next.paid_at || getTodayCST();
-                              next.paid_at = paid;
-                              next.next_pay_date = nextPayDateAfter(paid, row.start_date);
-                            }
+                            if (status === "paid" && !next.paid_at) next.paid_at = getTodayCST();
                             return { ...prev, [id]: next };
                           });
                         }}
@@ -359,30 +387,10 @@ function StudentsBillingTable({
                         className="h-8 w-full min-w-0 px-1 text-xs"
                         type="date"
                         value={draft.paid_at}
-                        onChange={(e) => {
-                          const paid_at = e.target.value;
-                          setDrafts((prev) => ({
-                            ...prev,
-                            [id]: {
-                              ...draft,
-                              paid_at,
-                              next_pay_date: paid_at
-                                ? nextPayDateAfter(paid_at, row.start_date)
-                                : draft.next_pay_date,
-                            },
-                          }));
-                        }}
-                      />
-                    </td>
-                    <td className="px-1.5 py-1.5">
-                      <Input
-                        className="h-8 w-full min-w-0 px-1 text-xs"
-                        type="date"
-                        value={draft.next_pay_date}
                         onChange={(e) =>
                           setDrafts((prev) => ({
                             ...prev,
-                            [id]: { ...draft, next_pay_date: e.target.value },
+                            [id]: { ...draft, paid_at: e.target.value },
                           }))
                         }
                       />
@@ -401,27 +409,40 @@ function StudentsBillingTable({
                       />
                     </td>
                     <td className="px-1 py-1.5">
-                      <Button
-                        type="button"
-                        size="icon"
-                        className="h-8 w-8"
-                        title={saving ? "Saving…" : "Save"}
-                        aria-label="Save payment"
-                        disabled={saving}
-                        onClick={() => {
-                          void save.mutateAsync({
-                            student_id: id,
-                            rate: Number(draft.rate) || 0,
-                            status: draft.status,
-                            payment_method: draft.payment_method.trim(),
-                            paid_at: draft.paid_at || null,
-                            next_pay_date: draft.next_pay_date || null,
-                            notes: draft.notes.trim(),
-                          });
-                        }}
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-0.5">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          title="Payment history"
+                          aria-label="Payment history"
+                          onClick={() => setHistoryStudent({ id, name: row.student_name })}
+                        >
+                          <History className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          className="h-8 w-8"
+                          title={saving ? "Saving…" : "Save this month"}
+                          aria-label="Save this month"
+                          disabled={saving}
+                          onClick={() => {
+                            void save.mutateAsync({
+                              student_id: id,
+                              start_date: row.start_date,
+                              rate: Number(draft.rate) || 0,
+                              status: draft.status,
+                              payment_method: draft.payment_method.trim(),
+                              paid_at: draft.paid_at || null,
+                              notes: draft.notes.trim(),
+                            });
+                          }}
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -431,9 +452,15 @@ function StudentsBillingTable({
         </table>
         <div className="flex items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
           <DollarSign className="h-3.5 w-3.5" />
-          Start date is read-only. Record a payment here; Students only shows paid vs unpaid.
+          {payPeriodLabel(year, month)} · start date is read-only
         </div>
       </div>
+      <StudentMonthHistoryDialog
+        studentId={historyStudent?.id ?? null}
+        studentName={historyStudent?.name ?? ""}
+        open={!!historyStudent}
+        onClose={() => setHistoryStudent(null)}
+      />
     </div>
   );
 }
@@ -472,6 +499,186 @@ function MethodSelect({
         />
       ) : null}
     </div>
+  );
+}
+
+function PaymentRecordsTable({
+  year,
+  month,
+  allMonths,
+  search,
+}: {
+  year: number;
+  month: number;
+  allMonths: boolean;
+  search: string;
+}) {
+  const { data = [], isLoading, isError, error } = useStudentPaymentRecords();
+  const [historyStudent, setHistoryStudent] = useState<{ id: string; name: string } | null>(null);
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return data.filter((r) => {
+      if (!allMonths && (r.year !== year || r.month !== month)) return false;
+      if (!q) return true;
+      return (
+        r.student_name.toLowerCase().includes(q) ||
+        r.student_email.toLowerCase().includes(q)
+      );
+    });
+  }, [data, search, allMonths, year, month]);
+
+  if (isLoading) return <Skeleton className="h-64 w-full rounded-xl" />;
+  if (isError) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        {error instanceof Error ? error.message : "Failed to load payment records."}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="font-display text-lg font-semibold tracking-tight">
+          {allMonths ? "All payment records" : payPeriodLabel(year, month)}
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Every saved monthly payment. Use the clock icon to see one student’s full history.
+        </p>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+        <table className="w-full table-fixed text-left text-sm">
+          <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="w-[9rem] px-2 py-2 font-medium">Month</th>
+              <th className="w-[22%] px-2 py-2 font-medium">Student</th>
+              <th className="w-[5.5rem] px-1.5 py-2 font-medium">Amount</th>
+              <th className="w-[6.5rem] px-1.5 py-2 font-medium">Status</th>
+              <th className="w-[8rem] px-1.5 py-2 font-medium">How paid</th>
+              <th className="w-[7.5rem] px-1.5 py-2 font-medium">Paid date</th>
+              <th className="px-1.5 py-2 font-medium">Note</th>
+              <th className="w-10 px-1 py-2 font-medium"> </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
+                  No payment records yet. Save a month on the Students tab to create one.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => (
+                <tr key={`${row.student_id}-${row.year}-${row.month}-${row.id ?? ""}`} className="border-b border-border/70 last:border-0">
+                  <td className="px-2 py-1.5 text-xs font-medium">{payPeriodLabel(row.year, row.month)}</td>
+                  <td className="min-w-0 px-2 py-1.5">
+                    <p className="truncate font-medium">{row.student_name}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{row.student_email}</p>
+                  </td>
+                  <td className="px-1.5 py-1.5 text-xs tabular-nums">${Number(row.amount || 0).toFixed(2)}</td>
+                  <td className="px-1.5 py-1.5">
+                    <Badge className={cn("capitalize", statusTone(row.status))}>{row.status}</Badge>
+                  </td>
+                  <td className="truncate px-1.5 py-1.5 text-xs">{row.payment_method || "—"}</td>
+                  <td className="px-1.5 py-1.5 text-xs tabular-nums">{formatRosterDate(row.paid_at)}</td>
+                  <td className="truncate px-1.5 py-1.5 text-xs text-muted-foreground">{row.notes || "—"}</td>
+                  <td className="px-1 py-1.5">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8"
+                      title="Student history"
+                      aria-label="Student history"
+                      onClick={() => setHistoryStudent({ id: row.student_id, name: row.student_name })}
+                    >
+                      <History className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <StudentMonthHistoryDialog
+        studentId={historyStudent?.id ?? null}
+        studentName={historyStudent?.name ?? ""}
+        open={!!historyStudent}
+        onClose={() => setHistoryStudent(null)}
+      />
+    </div>
+  );
+}
+
+function StudentMonthHistoryDialog({
+  studentId,
+  studentName,
+  open,
+  onClose,
+}: {
+  studentId: string | null;
+  studentName: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { data = [], isLoading, isError, error } = useStudentPaymentHistory(open ? studentId : null);
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      wide
+      title="Payment history"
+      description={studentName ? `Monthly records for ${studentName}` : undefined}
+      footer={
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      }
+    >
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : isError ? (
+        <p className="text-sm text-destructive">{error instanceof Error ? error.message : "Failed to load history."}</p>
+      ) : data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No monthly payment records yet for this student.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full table-fixed text-left text-sm">
+            <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="w-[28%] px-2 py-2 font-medium">Month</th>
+                <th className="w-[18%] px-2 py-2 font-medium">Amount</th>
+                <th className="w-[18%] px-2 py-2 font-medium">Status</th>
+                <th className="px-2 py-2 font-medium">How / when</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row: StudentPaymentRecord) => (
+                <tr key={`${row.year}-${row.month}-${row.id ?? ""}`} className="border-b border-border/60 last:border-0">
+                  <td className="px-2 py-2 text-xs font-medium">{payPeriodLabel(row.year, row.month)}</td>
+                  <td className="px-2 py-2 text-xs tabular-nums">${Number(row.amount || 0).toFixed(2)}</td>
+                  <td className="px-2 py-2">
+                    <Badge className={cn("capitalize", statusTone(row.status))}>{row.status}</Badge>
+                  </td>
+                  <td className="px-2 py-2 text-xs text-muted-foreground">
+                    {row.payment_method || "—"}
+                    {row.paid_at ? ` · ${formatRosterDate(row.paid_at)}` : ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Dialog>
   );
 }
 
@@ -531,6 +738,7 @@ function EmployeesSalariesTable({
 
   return (
     <div className="space-y-3">
+      <h2 className="font-display text-lg font-semibold tracking-tight">{payPeriodLabel(year, month)}</h2>
       <div className="flex flex-wrap gap-2 text-sm">
         <Badge className="border-border bg-muted text-muted-foreground">{totals.count} employees</Badge>
         <Badge className="border-border bg-muted text-muted-foreground">

@@ -59,6 +59,34 @@ export type StudentBillingSave = {
   notes: string;
 };
 
+export interface StudentMonthRow {
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  start_date: string | null;
+  rate: number;
+  status: PaymentStatus | string;
+  payment_method: string;
+  paid_at: string | null;
+  notes: string;
+  recorded: boolean;
+}
+
+export interface StudentPaymentRecord {
+  id?: string;
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  student_status: string;
+  year: number;
+  month: number;
+  amount: number;
+  status: string;
+  payment_method: string;
+  paid_at: string | null;
+  notes: string;
+}
+
 function toBillingRow(s: Student): StudentBillingRow {
   const start = studentStartDate(s);
   const live = livePaymentStatus(s);
@@ -149,23 +177,22 @@ export function useUpsertStudentBilling() {
         throw error;
       }
 
-      if (paidAt) {
-        const [y, m] = paidAt.split("-").map(Number);
-        await db.from("student_payments").upsert(
-          {
-            student_id: input.student_id,
-            year: y,
-            month: m,
-            amount: input.rate,
-            status,
-            payment_method: input.payment_method,
-            paid_at: paidAt,
-            notes: input.notes,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "student_id,year,month" },
-        );
-      }
+      const period = paidAt || getTodayCST();
+      const [y, m] = period.split("-").map(Number);
+      await db.from("student_payments").upsert(
+        {
+          student_id: input.student_id,
+          year: y,
+          month: m,
+          amount: input.rate,
+          status,
+          payment_method: input.payment_method,
+          paid_at: paidAt,
+          notes: input.notes,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "student_id,year,month" },
+      );
 
       return payload;
     },
@@ -173,9 +200,223 @@ export function useUpsertStudentBilling() {
       void qc.invalidateQueries({ queryKey: ["student-billing"] });
       void qc.invalidateQueries({ queryKey: ["students"] });
       void qc.invalidateQueries({ queryKey: ["student-payments"] });
+      void qc.invalidateQueries({ queryKey: ["student-month-payments"] });
+      void qc.invalidateQueries({ queryKey: ["student-payment-records"] });
       toast.success("Payment saved.");
     },
     onError: (err: Error) => toast.error(err.message || "Failed to save payment."),
+  });
+}
+
+export function useStudentMonthPayments(year: number, month: number) {
+  return useQuery({
+    queryKey: ["student-month-payments", year, month],
+    queryFn: async (): Promise<StudentMonthRow[]> => {
+      const { data: students, error: stuErr } = await supabase
+        .from("students")
+        .select(
+          "id, name, email, status, joining_date, applied_date, created_at, payment_amount, payment_status, payment_method, payment_date, payment_notes",
+        )
+        .neq("status", "inactive")
+        .order("name");
+      if (stuErr) throw stuErr;
+
+      const { data: pays, error: payErr } = await db
+        .from("student_payments")
+        .select("*")
+        .eq("year", year)
+        .eq("month", month);
+      if (payErr && !isMissingColumnError(payErr)) throw payErr;
+
+      const byStu = new Map(
+        ((pays ?? []) as { student_id: string }[]).map((p) => [p.student_id, p as Record<string, unknown>]),
+      );
+
+      return ((students ?? []) as Student[]).map((s) => {
+        const existing = byStu.get(s.id);
+        const start = studentStartDate(s);
+        if (existing) {
+          return {
+            student_id: s.id,
+            student_name: s.name,
+            student_email: s.email,
+            start_date: start,
+            rate: Number(existing.amount ?? s.payment_amount ?? 0),
+            status: String(existing.status ?? "unpaid"),
+            payment_method: String(existing.payment_method ?? ""),
+            paid_at: (existing.paid_at as string | null) ?? null,
+            notes: String(existing.notes ?? ""),
+            recorded: true,
+          };
+        }
+        return {
+          student_id: s.id,
+          student_name: s.name,
+          student_email: s.email,
+          start_date: start,
+          rate: Number(s.payment_amount ?? 0),
+          status: "unpaid",
+          payment_method: "",
+          paid_at: null,
+          notes: "",
+          recorded: false,
+        };
+      });
+    },
+  });
+}
+
+export function useUpsertStudentMonthPayment(year: number, month: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      student_id: string;
+      start_date: string | null;
+      rate: number;
+      status: string;
+      payment_method: string;
+      paid_at: string | null;
+      notes: string;
+    }) => {
+      const today = getTodayCST();
+      const [cy, cm] = today.split("-").map(Number);
+      let status = input.status === "partial" ? "unpaid" : input.status;
+      let paidAt = input.paid_at || null;
+      if (status === "paid") paidAt = paidAt || today;
+
+      const { error } = await db.from("student_payments").upsert(
+        {
+          student_id: input.student_id,
+          year,
+          month,
+          amount: input.rate,
+          status,
+          payment_method: input.payment_method,
+          paid_at: paidAt,
+          notes: input.notes,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "student_id,year,month" },
+      );
+      if (error) throw error;
+
+      const studentUpdate: {
+        payment_amount: number;
+        payment_status?: string;
+        payment_date?: string | null;
+        payment_method?: string | null;
+        payment_notes?: string | null;
+        next_pay_date?: string | null;
+      } = {
+        payment_amount: input.rate,
+      };
+      if (status === "paid") {
+        studentUpdate.payment_status = "paid";
+        studentUpdate.payment_date = paidAt;
+        studentUpdate.payment_method = input.payment_method || null;
+        studentUpdate.payment_notes = input.notes || null;
+        studentUpdate.next_pay_date = nextPayDateAfter(paidAt!, input.start_date);
+      } else if (year === cy && month === cm) {
+        studentUpdate.payment_status = status;
+        studentUpdate.payment_method = input.payment_method || null;
+        studentUpdate.payment_notes = input.notes || null;
+        if (status !== "waived" && status !== "n/a") {
+          studentUpdate.payment_status = livePaymentStatus({
+            payment_status: status,
+            next_pay_date: null,
+            payment_date: paidAt,
+            joining_date: input.start_date,
+          });
+        }
+      }
+
+      const { error: stuErr } = await supabase.from("students").update(studentUpdate).eq("id", input.student_id);
+      if (stuErr && !isMissingColumnError(stuErr)) throw stuErr;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["student-month-payments", year, month] });
+      void qc.invalidateQueries({ queryKey: ["student-payment-records"] });
+      void qc.invalidateQueries({ queryKey: ["student-payment-history"] });
+      void qc.invalidateQueries({ queryKey: ["student-billing"] });
+      void qc.invalidateQueries({ queryKey: ["students"] });
+      toast.success("Month payment saved.");
+    },
+    onError: (err: Error) => toast.error(err.message || "Failed to save month payment."),
+  });
+}
+
+export function useStudentPaymentRecords() {
+  return useQuery({
+    queryKey: ["student-payment-records"],
+    queryFn: async (): Promise<StudentPaymentRecord[]> => {
+      const { data: pays, error } = await db
+        .from("student_payments")
+        .select("*")
+        .order("year", { ascending: false })
+        .order("month", { ascending: false });
+      if (error) throw error;
+
+      const { data: students, error: stuErr } = await supabase
+        .from("students")
+        .select("id, name, email, status");
+      if (stuErr) throw stuErr;
+
+      const byId = new Map((students ?? []).map((s) => [s.id, s]));
+      return ((pays ?? []) as Record<string, unknown>[]).map((p) => {
+        const stu = byId.get(String(p.student_id));
+        return {
+          id: p.id ? String(p.id) : undefined,
+          student_id: String(p.student_id),
+          student_name: stu?.name ?? "Unknown student",
+          student_email: stu?.email ?? "",
+          student_status: stu?.status ?? "",
+          year: Number(p.year),
+          month: Number(p.month),
+          amount: Number(p.amount ?? 0),
+          status: String(p.status ?? "unpaid"),
+          payment_method: String(p.payment_method ?? ""),
+          paid_at: (p.paid_at as string | null) ?? null,
+          notes: String(p.notes ?? ""),
+        };
+      });
+    },
+  });
+}
+
+export function useStudentPaymentHistory(studentId: string | null) {
+  return useQuery({
+    queryKey: ["student-payment-history", studentId],
+    enabled: Boolean(studentId),
+    queryFn: async (): Promise<StudentPaymentRecord[]> => {
+      const { data: pays, error } = await db
+        .from("student_payments")
+        .select("*")
+        .eq("student_id", studentId)
+        .order("year", { ascending: false })
+        .order("month", { ascending: false });
+      if (error) throw error;
+
+      const { data: stu } = await supabase
+        .from("students")
+        .select("id, name, email, status")
+        .eq("id", studentId!)
+        .maybeSingle();
+
+      return ((pays ?? []) as Record<string, unknown>[]).map((p) => ({
+        id: p.id ? String(p.id) : undefined,
+        student_id: String(p.student_id),
+        student_name: stu?.name ?? "Unknown student",
+        student_email: stu?.email ?? "",
+        student_status: stu?.status ?? "",
+        year: Number(p.year),
+        month: Number(p.month),
+        amount: Number(p.amount ?? 0),
+        status: String(p.status ?? "unpaid"),
+        payment_method: String(p.payment_method ?? ""),
+        paid_at: (p.paid_at as string | null) ?? null,
+        notes: String(p.notes ?? ""),
+      }));
+    },
   });
 }
 
