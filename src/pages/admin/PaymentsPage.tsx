@@ -21,7 +21,7 @@ import {
   PAYMENT_STATUSES,
   type PaymentStatus,
 } from "@/lib/constants";
-import { livePaymentStatus, nextPayDateAfter } from "@/lib/billing";
+import { nextPayDateAfter } from "@/lib/billing";
 import { formatRosterDate, getTodayCST } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 
@@ -45,13 +45,6 @@ const MONTHS = [
 function periodFromToday() {
   const [y, m] = getTodayCST().split("-").map(Number);
   return { year: y, month: m };
-}
-
-function statusTone(status: string) {
-  if (status === "paid") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-800";
-  if (status === "partial") return "border-amber-500/30 bg-amber-500/10 text-amber-800";
-  if (status === "waived" || status === "n/a") return "border-sky-500/30 bg-sky-500/10 text-sky-800";
-  return "border-destructive/30 bg-destructive/10 text-destructive";
 }
 
 type EmpDraft = {
@@ -115,7 +108,7 @@ export default function AdminPaymentsPage() {
 
   return (
     <AppShell role="admin">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Finance</p>
@@ -274,18 +267,18 @@ function StudentsBillingTable({
         before the next pay date (when an admin opens Students).
       </p>
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[1180px] text-left text-sm">
-          <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+        <table className="w-full table-fixed text-left text-sm">
+          <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-3 py-2.5 font-medium">Student</th>
-              <th className="px-3 py-2.5 font-medium">Start date</th>
-              <th className="px-3 py-2.5 font-medium">Rate plan</th>
-              <th className="px-3 py-2.5 font-medium">Payment status</th>
-              <th className="px-3 py-2.5 font-medium">How paid</th>
-              <th className="px-3 py-2.5 font-medium">Paid date</th>
-              <th className="px-3 py-2.5 font-medium">Next pay date</th>
-              <th className="px-3 py-2.5 font-medium">Note</th>
-              <th className="px-3 py-2.5 font-medium">Save</th>
+              <th className="w-[16%] px-2 py-2 font-medium">Student</th>
+              <th className="w-[7.5rem] px-1.5 py-2 font-medium">Start date</th>
+              <th className="w-[5.5rem] px-1.5 py-2 font-medium">Rate</th>
+              <th className="w-[6.5rem] px-1.5 py-2 font-medium">Status</th>
+              <th className="w-[7rem] px-1.5 py-2 font-medium">How paid</th>
+              <th className="w-[7.25rem] px-1.5 py-2 font-medium">Paid date</th>
+              <th className="w-[7.25rem] px-1.5 py-2 font-medium">Next pay</th>
+              <th className="px-1.5 py-2 font-medium">Note</th>
+              <th className="w-10 px-1 py-2 font-medium"> </th>
             </tr>
           </thead>
           <tbody>
@@ -299,29 +292,24 @@ function StudentsBillingTable({
               rows.map((row) => {
                 const id = row.student_id;
                 const draft = drafts[id] ?? toStuDraft(row);
-                const live = livePaymentStatus({
-                  payment_status: draft.status,
-                  next_pay_date: draft.next_pay_date || null,
-                  payment_date: draft.paid_at || null,
-                  joining_date: row.start_date,
-                });
+                const saving = save.isPending && save.variables?.student_id === id;
                 return (
                   <tr key={id} className="border-b border-border/70 last:border-0">
-                    <td className="px-3 py-2">
-                      <p className="font-medium text-foreground">{row.student_name}</p>
-                      <p className="text-xs text-muted-foreground">{row.student_email}</p>
+                    <td className="min-w-0 px-2 py-1.5">
+                      <p className="truncate font-medium text-foreground">{row.student_name}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{row.student_email}</p>
                       {row.student_status === "inactive" ? (
-                        <Badge className="mt-1 border-destructive/30 bg-destructive/10 text-destructive">
+                        <Badge className="mt-0.5 border-destructive/30 bg-destructive/10 text-destructive">
                           Inactive
                         </Badge>
                       ) : null}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                    <td className="px-1.5 py-1.5 text-xs tabular-nums text-muted-foreground">
                       {formatRosterDate(row.start_date)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-1.5 py-1.5">
                       <Input
-                        className="h-8 w-[110px] tabular-nums"
+                        className="h-8 w-full min-w-0 px-1.5 tabular-nums text-xs"
                         type="number"
                         min={0}
                         step="0.01"
@@ -334,9 +322,9 @@ function StudentsBillingTable({
                         }
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-1.5 py-1.5">
                       <Select
-                        className="h-8 w-[120px]"
+                        className="h-8 w-full min-w-0 px-1.5 text-xs"
                         value={draft.status === "partial" ? "unpaid" : draft.status}
                         onChange={(e) => {
                           const status = e.target.value;
@@ -357,9 +345,8 @@ function StudentsBillingTable({
                           </option>
                         ))}
                       </Select>
-                      <Badge className={cn("mt-1 capitalize", statusTone(live))}>{live}</Badge>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-1.5 py-1.5">
                       <MethodSelect
                         value={draft.payment_method}
                         onChange={(payment_method) =>
@@ -367,9 +354,9 @@ function StudentsBillingTable({
                         }
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-1.5 py-1.5">
                       <Input
-                        className="h-8 w-[140px]"
+                        className="h-8 w-full min-w-0 px-1 text-xs"
                         type="date"
                         value={draft.paid_at}
                         onChange={(e) => {
@@ -387,9 +374,9 @@ function StudentsBillingTable({
                         }}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-1.5 py-1.5">
                       <Input
-                        className="h-8 w-[140px]"
+                        className="h-8 w-full min-w-0 px-1 text-xs"
                         type="date"
                         value={draft.next_pay_date}
                         onChange={(e) =>
@@ -400,9 +387,9 @@ function StudentsBillingTable({
                         }
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-1.5 py-1.5">
                       <Input
-                        className="h-8 min-w-[140px]"
+                        className="h-8 w-full min-w-0 px-1.5 text-xs"
                         placeholder="Notes"
                         value={draft.notes}
                         onChange={(e) =>
@@ -413,11 +400,14 @@ function StudentsBillingTable({
                         }
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-1 py-1.5">
                       <Button
                         type="button"
-                        size="sm"
-                        disabled={save.isPending && save.variables?.student_id === id}
+                        size="icon"
+                        className="h-8 w-8"
+                        title={saving ? "Saving…" : "Save"}
+                        aria-label="Save payment"
+                        disabled={saving}
                         onClick={() => {
                           void save.mutateAsync({
                             student_id: id,
@@ -431,7 +421,6 @@ function StudentsBillingTable({
                         }}
                       >
                         <Save className="h-3.5 w-3.5" />
-                        {save.isPending && save.variables?.student_id === id ? "Saving…" : "Save"}
                       </Button>
                     </td>
                   </tr>
@@ -458,9 +447,9 @@ function MethodSelect({
 }) {
   const listed = PAYMENT_METHODS.includes(value as (typeof PAYMENT_METHODS)[number]);
   return (
-    <>
+    <div className="min-w-0">
       <Select
-        className="h-8 w-[140px]"
+        className="h-8 w-full min-w-0 px-1.5 text-xs"
         value={listed ? value : value ? "__custom__" : ""}
         onChange={(e) => {
           const v = e.target.value;
@@ -476,9 +465,13 @@ function MethodSelect({
         <option value="__custom__">Custom…</option>
       </Select>
       {!listed && value ? (
-        <Input className="mt-1 h-8 w-[140px]" value={value} onChange={(e) => onChange(e.target.value)} />
+        <Input
+          className="mt-1 h-8 w-full min-w-0 px-1.5 text-xs"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -584,16 +577,16 @@ function EmployeeTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-      <table className="w-full min-w-[980px] text-left text-sm">
-        <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+      <table className="w-full table-fixed text-left text-sm">
+        <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="px-3 py-2.5 font-medium">Employee</th>
-            <th className="px-3 py-2.5 font-medium">Amount</th>
-            <th className="px-3 py-2.5 font-medium">Paid?</th>
-            <th className="px-3 py-2.5 font-medium">How paid</th>
-            <th className="px-3 py-2.5 font-medium">Paid date</th>
-            <th className="px-3 py-2.5 font-medium">Notes</th>
-            <th className="px-3 py-2.5 font-medium">Save</th>
+            <th className="w-[22%] px-2 py-2 font-medium">Employee</th>
+            <th className="w-[6.5rem] px-1.5 py-2 font-medium">Amount</th>
+            <th className="w-[6.5rem] px-1.5 py-2 font-medium">Paid?</th>
+            <th className="w-[8rem] px-1.5 py-2 font-medium">How paid</th>
+            <th className="w-[7.25rem] px-1.5 py-2 font-medium">Paid date</th>
+            <th className="px-1.5 py-2 font-medium">Notes</th>
+            <th className="w-10 px-1 py-2 font-medium"> </th>
           </tr>
         </thead>
         <tbody>
@@ -609,13 +602,13 @@ function EmployeeTable({
               const draft = drafts[id] ?? toEmpDraft(row);
               return (
                 <tr key={id} className="border-b border-border/70 last:border-0">
-                  <td className="px-3 py-2">
-                    <p className="font-medium text-foreground">{row.employee_name ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">{row.employee_email ?? ""}</p>
+                  <td className="min-w-0 px-2 py-1.5">
+                    <p className="truncate font-medium text-foreground">{row.employee_name ?? "—"}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{row.employee_email ?? ""}</p>
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-1.5 py-1.5">
                     <Input
-                      className="h-8 w-[120px] tabular-nums"
+                      className="h-8 w-full min-w-0 px-1.5 tabular-nums text-xs"
                       type="number"
                       min={0}
                       step="0.01"
@@ -625,9 +618,9 @@ function EmployeeTable({
                       }
                     />
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-1.5 py-1.5">
                     <Select
-                      className="h-8 w-[120px]"
+                      className="h-8 w-full min-w-0 px-1.5 text-xs"
                       value={draft.status}
                       onChange={(e) =>
                         setDrafts((prev) => ({
@@ -642,9 +635,8 @@ function EmployeeTable({
                         </option>
                       ))}
                     </Select>
-                    <Badge className={cn("mt-1 capitalize", statusTone(draft.status))}>{draft.status}</Badge>
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-1.5 py-1.5">
                     <MethodSelect
                       value={draft.payment_method}
                       onChange={(payment_method) =>
@@ -652,9 +644,9 @@ function EmployeeTable({
                       }
                     />
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-1.5 py-1.5">
                     <Input
-                      className="h-8 w-[140px]"
+                      className="h-8 w-full min-w-0 px-1 text-xs"
                       type="date"
                       value={draft.paid_at}
                       onChange={(e) =>
@@ -662,9 +654,9 @@ function EmployeeTable({
                       }
                     />
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-1.5 py-1.5">
                     <Input
-                      className="h-8 min-w-[160px]"
+                      className="h-8 w-full min-w-0 px-1.5 text-xs"
                       placeholder="Notes"
                       value={draft.notes}
                       onChange={(e) =>
@@ -672,10 +664,17 @@ function EmployeeTable({
                       }
                     />
                   </td>
-                  <td className="px-3 py-2">
-                    <Button type="button" size="sm" disabled={savingId === id} onClick={() => onSave(id)}>
+                  <td className="px-1 py-1.5">
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="h-8 w-8"
+                      title={savingId === id ? "Saving…" : "Save"}
+                      aria-label="Save salary"
+                      disabled={savingId === id}
+                      onClick={() => onSave(id)}
+                    >
                       <Save className="h-3.5 w-3.5" />
-                      {savingId === id ? "Saving…" : "Save"}
                     </Button>
                   </td>
                 </tr>

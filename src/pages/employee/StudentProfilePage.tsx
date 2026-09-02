@@ -109,7 +109,7 @@ export default function EmployeeStudentProfilePage() {
   return (
     <AppShell role="employee">
       <CloseSidebarOnJobApps active={tab === "apps"} />
-      <div className={cn("mx-auto space-y-5", tab === "apps" ? "max-w-7xl" : "max-w-6xl")}>
+      <div className={cn("mx-auto space-y-5", tab !== "apps" && "max-w-6xl")}>
         <div>
           <Link
             to="/app/students"
@@ -156,7 +156,7 @@ export default function EmployeeStudentProfilePage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:min-w-[280px]">
+            <div className="grid min-w-0 grid-cols-2 gap-3">
               <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-white/65">Coach</p>
                 <p className="mt-1 flex items-center gap-1.5 font-display text-lg font-semibold">

@@ -166,7 +166,7 @@ export default function AdminPlacementPage() {
 
   return (
     <AppShell role="admin">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight">Placement</h1>
@@ -257,19 +257,19 @@ export default function AdminPlacementPage() {
 
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+            <table className="w-full table-fixed text-left text-sm">
+              <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-3 font-medium">Student</th>
-                  <th className="px-3 py-3 font-medium">Employee</th>
-                  <th className="px-3 py-3 font-medium text-center">Apps</th>
+                  <th className="w-[18%] px-2 py-2 font-medium">Student</th>
+                  <th className="w-[12%] px-2 py-2 font-medium">Employee</th>
+                  <th className="w-[4.5rem] px-1.5 py-2 font-medium text-center">Apps</th>
                   {STAGE_META.map((s) => (
-                    <th key={s.key} className="px-3 py-3 font-medium text-center" title={s.label}>
+                    <th key={s.key} className="px-1 py-2 font-medium text-center" title={s.label}>
                       {s.short}
                     </th>
                   ))}
-                  <th className="px-3 py-3 font-medium">Account</th>
-                  <th className="px-3 py-3 font-medium">Last activity</th>
+                  <th className="w-[8%] px-2 py-2 font-medium">Account</th>
+                  <th className="w-[8%] px-2 py-2 font-medium">Last activity</th>
                 </tr>
               </thead>
               <tbody>
@@ -291,7 +291,7 @@ export default function AdminPlacementPage() {
                 ) : null}
                 {rows.map((r) => (
                   <tr key={r.student_id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                    <td className="px-3 py-3">
+                    <td className="px-2 py-2">
                       <div className="flex items-center gap-2">
                         <span
                           className={`h-2 w-2 rounded-full ${r.health.color}`}
@@ -308,17 +308,17 @@ export default function AdminPlacementPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-muted-foreground">{r.employee_name || "Unassigned"}</td>
-                    <td className="px-3 py-3 text-center">
+                    <td className="truncate px-2 py-2 text-muted-foreground">{r.employee_name || "Unassigned"}</td>
+                    <td className="px-1.5 py-2 text-center">
                       <span className="inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
                         {r.total_applications}
                       </span>
                     </td>
                     {STAGE_META.map((s) => (
-                      <td key={s.key} className="px-3 py-3 text-center">
+                      <td key={s.key} className="px-1 py-2 text-center">
                         <button
                           type="button"
-                          className="inline-flex min-w-[2rem] items-center justify-center rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs font-semibold hover:bg-primary/10 hover:text-primary"
+                          className="inline-flex min-w-[1.75rem] items-center justify-center rounded-full border border-border bg-muted/50 px-1.5 py-0.5 text-xs font-semibold hover:bg-primary/10 hover:text-primary"
                           title={`Open ${s.label} history`}
                           onClick={() => openStage(r.student_id, r.student_name, s.key)}
                         >

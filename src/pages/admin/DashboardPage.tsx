@@ -230,7 +230,7 @@ export default function AdminDashboardPage() {
               ) : data.employeePerformance.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No active employees found.</p>
               ) : (
-                <table className="w-full min-w-[520px] text-left text-sm">
+                <table className="w-full table-fixed text-left text-sm">
                   <thead>
                     <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                       <th className="pb-2 font-medium">Employee</th>
@@ -258,7 +258,7 @@ export default function AdminDashboardPage() {
                           </span>
                         </td>
                         <td className="py-3 tabular-nums text-muted-foreground">{row.dailyTarget}</td>
-                        <td className="min-w-[140px] py-3">
+                        <td className="py-3">
                           <ProgressBar value={row.progressPct} />
                         </td>
                       </tr>

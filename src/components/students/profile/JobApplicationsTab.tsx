@@ -332,18 +332,18 @@ export function StudentJobApplicationsTab({
         </p>
 
         <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full table-fixed text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-2.5 font-medium">Sl</th>
-                <th className="px-3 py-2.5 font-medium">Date</th>
-                <th className="px-3 py-2.5 font-medium">Applied Link</th>
-                <th className="px-3 py-2.5 font-medium">Job Role</th>
-                <th className="px-3 py-2.5 font-medium">Company</th>
-                <th className="px-3 py-2.5 font-medium">Time</th>
-                <th className="px-3 py-2.5 font-medium">Resume</th>
-                <th className="px-3 py-2.5 font-medium">Status</th>
-                <th className="px-3 py-2.5 font-medium">Actions</th>
+                <th className="w-10 px-2 py-2 font-medium">Sl</th>
+                <th className="w-[6.5rem] px-2 py-2 font-medium">Date</th>
+                <th className="px-2 py-2 font-medium">Applied Link</th>
+                <th className="w-[16%] px-2 py-2 font-medium">Job Role</th>
+                <th className="w-[14%] px-2 py-2 font-medium">Company</th>
+                <th className="w-[5.5rem] px-2 py-2 font-medium">Time</th>
+                <th className="w-[7rem] px-2 py-2 font-medium">Resume</th>
+                <th className="w-[8rem] px-2 py-2 font-medium">Status</th>
+                <th className="w-16 px-1 py-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -546,7 +546,7 @@ export function StudentJobApplicationsTab({
                   </button>
                   {open ? (
                     <div className="overflow-x-auto border-t border-border bg-muted/20">
-                      <table className="w-full min-w-[960px] text-left text-sm">
+                      <table className="w-full table-fixed text-left text-sm">
                         <thead className="text-xs uppercase tracking-wide text-muted-foreground">
                           <tr>
                             <th className="px-3 py-2 font-medium">Sl</th>

@@ -46,7 +46,7 @@ export default function EmployeeStudentsPage() {
 
   return (
     <AppShell role="employee">
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="space-y-6">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight">
             {accessAll ? "All students" : "My students"}
@@ -67,17 +67,17 @@ export default function EmployeeStudentsPage() {
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-          <table className="w-full min-w-[800px] text-left text-sm">
-            <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+          <table className="w-full table-fixed text-left text-sm">
+            <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-3 font-medium">Student</th>
-                <th className="px-3 py-3 font-medium">Start Date</th>
-                <th className="px-3 py-3 font-medium">Program</th>
-                <th className="px-3 py-3 font-medium">Apps</th>
-                <th className="px-3 py-3 font-medium">Today</th>
-                <th className="px-3 py-3 font-medium">Interviews</th>
-                <th className="px-4 py-3 font-medium">Documents</th>
-                <th className="px-4 py-3 font-medium" />
+                <th className="w-[22%] px-2 py-2 font-medium">Student</th>
+                <th className="w-[8rem] px-2 py-2 font-medium">Start Date</th>
+                <th className="w-[14%] px-2 py-2 font-medium">Program</th>
+                <th className="w-[4.5rem] px-2 py-2 font-medium">Apps</th>
+                <th className="w-[4.5rem] px-2 py-2 font-medium">Today</th>
+                <th className="w-[5.5rem] px-2 py-2 font-medium">Int.</th>
+                <th className="px-2 py-2 font-medium">Documents</th>
+                <th className="w-20 px-2 py-2 font-medium" />
               </tr>
             </thead>
             <tbody>
@@ -120,7 +120,7 @@ export default function EmployeeStudentsPage() {
                         <td className="px-4 py-3 tabular-nums">{stats?.todayCount ?? 0}</td>
                         <td className="px-4 py-3 tabular-nums">{stats?.interviewCount ?? 0}</td>
                         <td className="px-4 py-3">
-                          <div className="flex min-w-[120px] flex-col gap-1">
+                          <div className="flex min-w-0 flex-col gap-1">
                             <ProgressBar value={docPct} />
                             <span className="text-[11px] text-muted-foreground">
                               {s.documents_submitted}/{s.documents_total}

@@ -774,6 +774,47 @@ export type Database = {
           },
         ]
       }
+      student_start_date_history: {
+        Row: {
+          changed_by: string | null
+          changed_by_email: string
+          changed_by_name: string
+          created_at: string
+          id: string
+          new_date: string | null
+          old_date: string | null
+          student_id: string
+        }
+        Insert: {
+          changed_by?: string | null
+          changed_by_email?: string
+          changed_by_name?: string
+          created_at?: string
+          id?: string
+          new_date?: string | null
+          old_date?: string | null
+          student_id: string
+        }
+        Update: {
+          changed_by?: string | null
+          changed_by_email?: string
+          changed_by_name?: string
+          created_at?: string
+          id?: string
+          new_date?: string | null
+          old_date?: string | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_start_date_history_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppressed_emails: {
         Row: {
           created_at: string

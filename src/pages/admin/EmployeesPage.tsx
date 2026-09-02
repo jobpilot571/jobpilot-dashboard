@@ -239,7 +239,7 @@ export default function AdminEmployeesPage({
 
   return (
     <AppShell role={shellRole}>
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight">Employees</h1>
@@ -312,18 +312,18 @@ export default function AdminEmployeesPage({
 
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+            <table className="w-full table-fixed text-left text-sm">
+              <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <Th label="Employee" onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir} />
-                  <Th label="Start Date" onClick={() => toggleSort("startDate")} active={sortKey === "startDate"} dir={sortDir} />
-                  <Th label="Category" onClick={() => toggleSort("category")} active={sortKey === "category"} dir={sortDir} />
-                  <Th label="Assigned" onClick={() => toggleSort("assigned")} active={sortKey === "assigned"} dir={sortDir} />
-                  <Th label="Apps today" onClick={() => toggleSort("appsToday")} active={sortKey === "appsToday"} dir={sortDir} />
-                  <Th label="Progress" onClick={() => toggleSort("progress")} active={sortKey === "progress"} dir={sortDir} />
-                  <Th label="Status" onClick={() => toggleSort("status")} active={sortKey === "status"} dir={sortDir} />
-                  <th className="px-3 py-3 font-medium">Welcome email</th>
-                  <th className="px-3 py-3 font-medium">Actions</th>
+                  <Th className="w-[22%]" label="Employee" onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir} />
+                  <Th className="w-[7.5rem]" label="Start Date" onClick={() => toggleSort("startDate")} active={sortKey === "startDate"} dir={sortDir} />
+                  <Th className="w-[12%]" label="Category" onClick={() => toggleSort("category")} active={sortKey === "category"} dir={sortDir} />
+                  <Th className="w-[6rem]" label="Assigned" onClick={() => toggleSort("assigned")} active={sortKey === "assigned"} dir={sortDir} />
+                  <Th className="w-[6rem]" label="Apps today" onClick={() => toggleSort("appsToday")} active={sortKey === "appsToday"} dir={sortDir} />
+                  <Th className="w-[12%]" label="Progress" onClick={() => toggleSort("progress")} active={sortKey === "progress"} dir={sortDir} />
+                  <Th className="w-[9%]" label="Status" onClick={() => toggleSort("status")} active={sortKey === "status"} dir={sortDir} />
+                  <th className="w-[9%] px-1.5 py-2 font-medium">Welcome</th>
+                  <th className="w-12 px-1 py-2 font-medium"> </th>
                 </tr>
               </thead>
               <tbody>
@@ -354,10 +354,10 @@ export default function AdminEmployeesPage({
 
                   return (
                     <tr key={emp.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-2">
                         <button
                           type="button"
-                          className="flex items-center gap-3 text-left"
+                          className="flex min-w-0 items-center gap-2 text-left"
                           onClick={() => setDetail(emp)}
                         >
                           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
@@ -369,25 +369,25 @@ export default function AdminEmployeesPage({
                           </div>
                         </button>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
+                      <td className="whitespace-nowrap px-2 py-2 text-xs text-muted-foreground">
                         {formatRosterDate(employeeStartDate(emp))}
                       </td>
-                      <td className="px-3 py-3 text-muted-foreground">{emp.job_role_category || "—"}</td>
-                      <td className="px-3 py-3 tabular-nums text-muted-foreground">
+                      <td className="truncate px-2 py-2 text-muted-foreground">{emp.job_role_category || "—"}</td>
+                      <td className="px-2 py-2 tabular-nums text-muted-foreground">
                         {stats.assigned} student{stats.assigned === 1 ? "" : "s"}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-2">
                         <span className="inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
                           {stats.appsToday}
                         </span>
                       </td>
-                      <td className="min-w-[150px] px-3 py-3">
+                      <td className="px-2 py-2">
                         <div className="space-y-1">
                           <ProgressBar value={progress} />
                           <p className="text-[11px] text-muted-foreground">Target {target}/day</p>
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-2">
                         <div className="flex flex-wrap gap-1">
                           <Badge
                             className={
@@ -415,10 +415,10 @@ export default function AdminEmployeesPage({
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-1.5 py-2">
                         <EmailStatusBadge log={log} />
                       </td>
-                      <td className="relative px-3 py-3">
+                      <td className="relative px-1 py-2">
                         <Button
                           type="button"
                           variant="ghost"
@@ -620,14 +620,16 @@ function Th({
   onClick,
   active,
   dir,
+  className,
 }: {
   label: string;
   onClick: () => void;
   active: boolean;
   dir: "asc" | "desc";
+  className?: string;
 }) {
   return (
-    <th className="px-3 py-3 font-medium">
+    <th className={cn("px-1.5 py-2 font-medium", className)}>
       <button type="button" onClick={onClick} className="inline-flex items-center gap-1 hover:text-foreground">
         {label}
         {active ? <span className="text-[10px]">{dir === "asc" ? "▲" : "▼"}</span> : null}

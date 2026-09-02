@@ -270,7 +270,7 @@ export default function AdminReportsPage() {
               </Button>
             </div>
             <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full table-fixed text-left text-sm">
                 <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-medium">Employee</th>
@@ -327,7 +327,7 @@ export default function AdminReportsPage() {
               </Button>
             </div>
             <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full table-fixed text-left text-sm">
                 <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-medium">Student</th>
@@ -370,7 +370,7 @@ export default function AdminReportsPage() {
               1h break. Based on applications stamped with <code className="text-xs">created_by_employee_id</code>.
             </p>
             <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-              <table className="w-full min-w-[860px] text-left text-sm">
+              <table className="w-full table-fixed text-left text-sm">
                 <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-medium">Employee</th>

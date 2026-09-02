@@ -124,7 +124,7 @@ export default function StudentDocumentsPage() {
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[480px] text-left text-sm">
+                <table className="w-full table-fixed text-left text-sm">
                   <thead className="border-b border-border text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="py-2 pr-3 font-medium">Type</th>

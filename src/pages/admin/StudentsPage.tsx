@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
+  History,
   KeyRound,
   Mail,
   MoreHorizontal,
@@ -23,6 +24,11 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { Dialog, Select } from "@/components/ui/dialog";
 import { StudentFormDialog } from "@/components/students/StudentFormDialog";
 import { StudentDetailPanel } from "@/components/students/StudentDetailPanel";
+import {
+  ConfirmStartDateChangeDialog,
+  LockedStartDateCell,
+  StartDateHistoryDialog,
+} from "@/components/students/StartDateLock";
 import { EmailStatusBadge } from "@/components/employees/EmailStatusBadge";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useStudents } from "@/hooks/useStudents";
@@ -31,7 +37,6 @@ import { useStudentAppStats } from "@/hooks/useStudentAppStats";
 import { getStudentBucket, studentStartDate, type Student } from "@/lib/students";
 import { livePaymentStatus } from "@/lib/billing";
 import { sendWelcomeCredentials } from "@/lib/sendWelcomeCredentials";
-import { isMissingColumnError } from "@/lib/employees";
 import { runPaymentReminders } from "@/hooks/usePayments";
 import { supabase } from "@/integrations/supabase/client";
 import { getInitials } from "@/features/employees/constants";
@@ -96,6 +101,8 @@ export default function AdminStudentsPage() {
   const [inactiveReason, setInactiveReason] = useState("Subscription ended");
   const [resetTarget, setResetTarget] = useState<Student | null>(null);
   const [resetPassword, setResetPassword] = useState("");
+  const [dateChangeStudent, setDateChangeStudent] = useState<Student | null>(null);
+  const [historyStudent, setHistoryStudent] = useState<Student | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -200,29 +207,6 @@ export default function AdminStudentsPage() {
     void queryClient.invalidateQueries({ queryKey: ["student-app-stats"] });
     void queryClient.invalidateQueries({ queryKey: ["employee-apps-today"] });
     void queryClient.invalidateQueries({ queryKey: ["student-billing"] });
-  };
-
-  const saveStartDate = async (student: Student, value: string) => {
-    const prev = studentStartDate(student);
-    if ((prev || "") === value) return;
-    setBusy(true);
-    try {
-      const payload: {
-        joining_date: string | null;
-        next_pay_date?: string | null;
-      } = { joining_date: value || null };
-      if (!student.payment_date && (!student.next_pay_date || student.next_pay_date === prev)) {
-        payload.next_pay_date = value || null;
-      }
-      const { error } = await supabase.from("students").update(payload).eq("id", student.id);
-      if (error && !isMissingColumnError(error)) throw error;
-      toast.success("Start date updated.");
-      invalidateAll();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update start date.");
-    } finally {
-      setBusy(false);
-    }
   };
 
   const setActiveStatus = async (student: Student, action: "active" | "inactive") => {
@@ -467,7 +451,7 @@ export default function AdminStudentsPage() {
               <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <Th className="w-[22%]" label="Student" onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir} />
-                  <Th className="w-[9.5rem]" label="Start date" onClick={() => toggleSort("startDate")} active={sortKey === "startDate"} dir={sortDir} />
+                  <Th className="w-[11rem]" label="Start date" onClick={() => toggleSort("startDate")} active={sortKey === "startDate"} dir={sortDir} />
                   <Th className="w-[12%]" label="Program" onClick={() => toggleSort("program")} active={sortKey === "program"} dir={sortDir} />
                   <Th className="w-[11%]" label="Assigned" onClick={() => toggleSort("assigned")} active={sortKey === "assigned"} dir={sortDir} />
                   <Th className="w-[4.25rem]" label="Apps" onClick={() => toggleSort("apps")} active={sortKey === "apps"} dir={sortDir} />
@@ -499,7 +483,6 @@ export default function AdminStudentsPage() {
                   const stats = statsMap[stu.id] ?? { appCount: 0, interviewCount: 0, todayCount: 0 };
                   const log = stu.user_id ? emailLogs.data?.[stu.user_id] : null;
                   const start = studentStartDate(stu);
-                  const startValue = (start || "").slice(0, 10);
                   const statusTone =
                     bucket === "inactive" ? "inactive" : bucket === "unassigned" ? "pending" : "active";
 
@@ -523,13 +506,11 @@ export default function AdminStudentsPage() {
                         </Link>
                       </td>
                       <td className="px-1.5 py-2">
-                        <Input
-                          type="date"
-                          aria-label={`Start date for ${stu.name}`}
-                          className="h-8 w-[8.6rem] px-1.5 text-xs"
-                          value={startValue}
+                        <LockedStartDateCell
+                          date={start}
                           disabled={busy}
-                          onChange={(e) => void saveStartDate(stu, e.target.value)}
+                          onChangeClick={() => setDateChangeStudent(stu)}
+                          onHistoryClick={() => setHistoryStudent(stu)}
                         />
                       </td>
                       <td className="truncate px-2 py-2 text-muted-foreground" title={stu.program || undefined}>
@@ -595,10 +576,17 @@ export default function AdminStudentsPage() {
                             />
                             <MenuItem
                               icon={CalendarDays}
-                              label="Edit start date"
+                              label="Change start date"
                               onClick={() => {
-                                setEditing(stu);
-                                setFormOpen(true);
+                                setDateChangeStudent(stu);
+                                setMenuId(null);
+                              }}
+                            />
+                            <MenuItem
+                              icon={History}
+                              label="Start date history"
+                              onClick={() => {
+                                setHistoryStudent(stu);
                                 setMenuId(null);
                               }}
                             />
@@ -691,6 +679,17 @@ export default function AdminStudentsPage() {
           setFormOpen(false);
           setEditing(null);
         }}
+      />
+
+      <ConfirmStartDateChangeDialog
+        student={dateChangeStudent}
+        open={!!dateChangeStudent}
+        onClose={() => setDateChangeStudent(null)}
+      />
+      <StartDateHistoryDialog
+        student={historyStudent}
+        open={!!historyStudent}
+        onClose={() => setHistoryStudent(null)}
       />
 
       <StudentDetailPanel

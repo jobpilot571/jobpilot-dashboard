@@ -172,7 +172,7 @@ export default function AdminFreeTrialsPage() {
 
   return (
     <AppShell role="admin">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="space-y-5">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-primary" />
@@ -307,18 +307,18 @@ export default function AdminFreeTrialsPage() {
 
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-sm">
-              <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+            <table className="w-full table-fixed text-left text-sm">
+              <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-3 font-medium">Student</th>
-                  <th className="px-3 py-3 font-medium">Target role</th>
-                  <th className="px-3 py-3 font-medium">Trial window</th>
-                  <th className="px-3 py-3 font-medium">Apps</th>
-                  <th className="px-3 py-3 font-medium">Assigned to</th>
-                  <th className="px-3 py-3 font-medium">Status</th>
-                  <th className="px-3 py-3 font-medium">Follow-up</th>
-                  <th className="px-3 py-3 font-medium">Resume</th>
-                  <th className="px-3 py-3 font-medium">Actions</th>
+                  <th className="w-[18%] px-2 py-2 font-medium">Student</th>
+                  <th className="w-[12%] px-2 py-2 font-medium">Target role</th>
+                  <th className="w-[9rem] px-2 py-2 font-medium">Trial window</th>
+                  <th className="w-[4rem] px-2 py-2 font-medium">Apps</th>
+                  <th className="w-[12%] px-2 py-2 font-medium">Assigned to</th>
+                  <th className="w-[8%] px-2 py-2 font-medium">Status</th>
+                  <th className="w-[8%] px-2 py-2 font-medium">Follow-up</th>
+                  <th className="w-[8%] px-2 py-2 font-medium">Resume</th>
+                  <th className="w-16 px-1 py-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -347,12 +347,12 @@ export default function AdminFreeTrialsPage() {
 
                   return (
                     <tr key={t.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                      <td className="px-3 py-3">
-                        <p className="font-medium text-foreground">{t.full_name || "—"}</p>
-                        <p className="text-xs text-muted-foreground">{t.email}</p>
-                        <p className="text-[11px] text-muted-foreground">{t.phone || "No phone"} · {t.visa_status || "Visa n/a"}</p>
+                      <td className="min-w-0 truncate px-2 py-2">
+                        <p className="truncate font-medium text-foreground">{t.full_name || "—"}</p>
+                        <p className="truncate text-xs text-muted-foreground">{t.email}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">{t.phone || "No phone"} · {t.visa_status || "Visa n/a"}</p>
                       </td>
-                      <td className="px-3 py-3 text-muted-foreground">{t.target_role || "—"}</td>
+                      <td className="truncate px-2 py-2 text-muted-foreground">{t.target_role || "—"}</td>
                       <td className="px-3 py-3 text-xs text-muted-foreground">
                         <div>{format(new Date(t.signup_date), "MMM d, yyyy")}</div>
                         <div className="mt-0.5">→ {format(new Date(t.trial_end_date), "MMM d, yyyy")}</div>

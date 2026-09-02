@@ -28,6 +28,18 @@ export function formatDateCST(isoTimestamp: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date(isoTimestamp));
 }
 
+/** Display a timestamp as "Aug 5, 2026, 3:14 PM" in America/Chicago. */
+export function formatDateTimeCST(isoTimestamp: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TZ,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(isoTimestamp));
+}
+
 /** Display a date-only (YYYY-MM-DD) or ISO timestamp as "Aug 5, 2026" without TZ shift. */
 export function formatRosterDate(value?: string | null): string {
   if (!value) return "—";

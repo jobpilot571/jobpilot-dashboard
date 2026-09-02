@@ -109,7 +109,6 @@ export function StudentFormDialog({
           })
           .eq("id", student.id);
         if (error) throw error;
-        await persistJoining(student.id);
         toast.success("Student updated.");
         invalidate();
         onClose();
@@ -255,8 +254,18 @@ export function StudentFormDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="stu-joining">Start date</Label>
-            <Input id="stu-joining" type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} />
-            <p className="text-[11px] text-muted-foreground">Admin only. This date drives the payment cycle and cannot be changed on Payments.</p>
+            <Input
+              id="stu-joining"
+              type="date"
+              value={joiningDate}
+              onChange={(e) => setJoiningDate(e.target.value)}
+              disabled={isEdit}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {isEdit
+                ? "Locked. Change it from the Students table — it asks for confirmation, emails you, and keeps a history."
+                : "Admin only. This date drives the payment cycle."}
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="stu-program">Program / target role</Label>

@@ -116,7 +116,7 @@ export default function EmployeeHistoryPage() {
         ) : null}
 
         <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full table-fixed text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">Date</th>
