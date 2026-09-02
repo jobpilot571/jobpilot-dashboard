@@ -32,10 +32,10 @@ import {
   type PipelineEvent,
 } from "@/hooks/usePlacement";
 import {
-  FORWARD_STAGES,
-  STAGE_STATUS_OPTIONS,
   appForwardNote,
+  normalizeStage,
   parseAppIdFromForwardNote,
+  placementStageLabel,
   type ForwardStageKey,
 } from "@/features/placement/constants";
 import { autofillFromJobLink, JOB_LINK_GUIDANCE } from "@/lib/jobLinkAutofill";
@@ -128,9 +128,12 @@ export function StudentJobApplicationsTab({
   const stageByAppId = useMemo(() => {
     const map: Record<string, PipelineEvent> = {};
     const rank: Record<string, number> = {
-      panel: 5,
-      technical: 4,
-      screening: 3,
+      rejected: 7,
+      offer: 6,
+      hr: 5,
+      panel: 4,
+      technical: 3,
+      screening: 2,
       ai_screening: 2,
       assessment: 1,
     };
@@ -206,14 +209,22 @@ export function StudentJobApplicationsTab({
       if (app.status !== "forwarded") {
         await update.mutateAsync({ id: app.id, updates: { status: "forwarded" } });
       }
-      const existingSameStage = pipeline.find(
-        (e) => parseAppIdFromForwardNote(e.notes) === app.id && e.stage === stage,
-      );
-      if (existingSameStage) {
-        toast.message(`Already on ${FORWARD_STAGES.find((s) => s.key === stage)?.label}.`);
+      const existing = pipeline.find((e) => parseAppIdFromForwardNote(e.notes) === app.id);
+      if (existing && normalizeStage(existing.stage) === stage) {
+        toast.message(`Already on ${placementStageLabel(stage)}.`);
         return;
       }
-      const defaultStatus = STAGE_STATUS_OPTIONS[stage][0] ?? "Pending";
+      if (existing) {
+        await upsertPipeline.mutateAsync({
+          id: existing.id,
+          student_id: studentId,
+          stage,
+          event_date: getTodayCST(),
+          status: placementStageLabel(stage),
+        });
+        toast.success(`Moved to ${placementStageLabel(stage)}.`);
+        return;
+      }
       await upsertPipeline.mutateAsync({
         student_id: studentId,
         employee_id: employeeId ?? null,
@@ -223,10 +234,10 @@ export function StudentJobApplicationsTab({
         event_link: app.applied_link || null,
         event_date: getTodayCST(),
         document_url: app.resume_file_url || null,
-        status: defaultStatus,
+        status: placementStageLabel(stage),
         notes: appForwardNote(app.id),
       });
-      toast.success(`Forwarded to ${FORWARD_STAGES.find((s) => s.key === stage)?.label}.`);
+      toast.success(`Forwarded to ${placementStageLabel(stage)}.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to set forward stage.");
     }
@@ -235,7 +246,7 @@ export function StudentJobApplicationsTab({
   const saveDraft = () => {
     if (!link.trim()) return;
     if (status === "forwarded" && !draftStage) {
-      toast.error("Choose Forwarded → Assessment, Screening, Technical, or Panel.");
+      toast.error("Choose Forwarded → a pipeline stage.");
       return;
     }
     add.mutate(

@@ -95,6 +95,32 @@ export function useJobApplications(studentId: string | undefined) {
   });
 }
 
+/** Lightweight application lookup for placement cards (applied date, resume, link). */
+export function useJobApplicationIndex(enabled = true) {
+  return useQuery({
+    queryKey: ["job_applications", "index"],
+    enabled,
+    queryFn: async () => {
+      const pageSize = 1000;
+      const all: JobApplication[] = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from("job_applications")
+          .select(
+            "id, student_id, serial_no, applied_date, applied_link, job_role, company_name, applied_time, applied_at, resume_file_url, status, created_by_employee_id, created_at",
+          )
+          .order("applied_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        const rows = (data ?? []) as JobApplication[];
+        all.push(...rows);
+        if (rows.length < pageSize) break;
+      }
+      return all;
+    },
+  });
+}
+
 async function nextSerialNo(studentId: string): Promise<number> {
   const { data, error } = await supabase
     .from("job_applications")

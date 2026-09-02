@@ -15,12 +15,12 @@ export default function StudentForwardedPage() {
 
   return (
     <AppShell role="student">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="space-y-6">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight">Forwarded</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Placement</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Track forwarded applications and interview rounds. You can add new rows; only counselors and
-            admins can delete.
+            Track forwarded applications across Assessment, Screening, Interview, Panel, HR, Offer letter,
+            and Rejected. You can add cards and upload screenshots; only an admin can delete.
           </p>
         </div>
 
@@ -30,7 +30,7 @@ export default function StudentForwardedPage() {
             <Skeleton className="h-48 w-full" />
           </div>
         ) : (
-          <StudentForwardedTab studentId={student.id} canDelete={false} canAdd />
+          <StudentForwardedTab studentId={student.id} />
         )}
       </div>
     </AppShell>

@@ -53,6 +53,7 @@ const employeeNavBase: NavItem[] = [
   { title: "Dashboard", to: "/app", icon: LayoutDashboard, end: true },
   { title: "Students", to: "/app/students", icon: GraduationCap },
   { title: "Applications", to: "/app/applications", icon: Briefcase },
+  { title: "Placement", to: "/app/placement", icon: Forward },
   { title: "History", to: "/app/history", icon: History },
   { title: "Performance", to: "/app/performance", icon: Target },
   { title: "Reports", to: "/app/reports", icon: BarChart3 },
@@ -63,7 +64,7 @@ const studentNav: NavItem[] = [
   { title: "Dashboard", to: "/me", icon: LayoutDashboard, end: true },
   { title: "Progress", to: "/me/progress", icon: Target },
   { title: "History", to: "/me/history", icon: History },
-  { title: "Forwarded", to: "/me/forwarded", icon: Forward },
+  { title: "Placement", to: "/me/forwarded", icon: Forward },
   { title: "Profile", to: "/me/profile", icon: User },
   { title: "Documents", to: "/me/documents", icon: FolderOpen },
 ];

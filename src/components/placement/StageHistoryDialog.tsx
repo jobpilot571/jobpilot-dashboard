@@ -4,12 +4,13 @@ import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { placementStageLabel, type PipelineStage } from "@/features/placement/constants";
+import { placementStageLabel, normalizeStage, type PipelineStage } from "@/features/placement/constants";
 import {
   useDeletePipelineEvent,
   type PipelineEvent,
 } from "@/hooks/usePlacement";
 import { PlacementEventDialog } from "@/components/placement/PlacementEventDialog";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function StageHistoryDialog({
   open,
@@ -27,12 +28,15 @@ export function StageHistoryDialog({
   events: PipelineEvent[];
 }) {
   const del = useDeletePipelineEvent();
+  const { role } = useAuth();
+  const canDelete = role === "admin";
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<PipelineEvent | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const stageEvents = useMemo(
-    () => events.filter((e) => e.student_id === studentId && e.stage === stage),
+    () =>
+      events.filter((e) => e.student_id === studentId && normalizeStage(e.stage) === stage),
     [events, studentId, stage],
   );
 
@@ -113,9 +117,11 @@ export function StageHistoryDialog({
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
+                    {canDelete ? (
                     <Button type="button" variant="ghost" size="icon" onClick={() => setConfirmId(ev.id)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
+                    ) : null}
                   </div>
                 </div>
               </li>

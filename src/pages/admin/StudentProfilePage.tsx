@@ -25,7 +25,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "apps", label: "Job Applications" },
   { id: "profile", label: "Profile" },
   { id: "details", label: "Application Details" },
-  { id: "forwarded", label: "Forwarded" },
+  { id: "forwarded", label: "Placement" },
 ];
 
 /** Closes the left sidebar while Job Applications is active for a wider table. */

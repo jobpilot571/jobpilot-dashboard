@@ -31,7 +31,7 @@ function displayLabel(status: string, forwardStage?: ForwardStageKey | "") {
 
 /**
  * Status dropdown with nested Forwarded submenu
- * (Assessment / Screening / Technical / Panel) layered in the same menu.
+ * (Assessment / Screening / Interview / Panel / HR / Offer / Rejected).
  */
 export function AppStatusMenu({
   status,
@@ -110,7 +110,7 @@ export function AppStatusMenu({
         <div
           ref={menuRef}
           style={{ top: pos.top, left: pos.left }}
-          className="fixed z-[80] w-[172px] overflow-hidden rounded-lg border border-border bg-card shadow-xl"
+          className="fixed z-[80] w-[200px] overflow-hidden rounded-lg border border-border bg-card shadow-xl"
         >
           {layer === "status" ? (
             <ul className="py-1" role="listbox">
@@ -188,7 +188,7 @@ export function AppStatusMenu({
           setLayer("status");
         }}
         className={cn(
-          "inline-flex h-8 min-w-[140px] max-w-[180px] items-center gap-2 rounded-md border border-input bg-card px-2.5 text-left text-xs font-medium text-foreground shadow-sm transition hover:bg-muted/60 disabled:opacity-50",
+          "inline-flex h-8 min-w-[140px] max-w-[200px] items-center gap-2 rounded-md border border-input bg-card px-2.5 text-left text-xs font-medium text-foreground shadow-sm transition hover:bg-muted/60 disabled:opacity-50",
           open && "ring-2 ring-ring",
         )}
       >

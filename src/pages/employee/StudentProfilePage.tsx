@@ -29,7 +29,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "apps", label: "Job Applications" },
   { id: "profile", label: "Profile" },
   { id: "details", label: "Application Details" },
-  { id: "forwarded", label: "Forwarded" },
+  { id: "forwarded", label: "Placement" },
 ];
 
 const TAB_IDS = new Set<Tab>(TABS.map((t) => t.id));

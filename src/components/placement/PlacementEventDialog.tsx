@@ -54,7 +54,7 @@ export function PlacementEventDialog({
       onClose={onClose}
       wide
       title={`${initial ? "Edit" : "Add"} — ${placementStageLabel(stage)}`}
-      description="Stage keys stay the same in the database; only labels change in the UI."
+      description="Fields change with the pipeline stage. Status on the board is what moves the card."
       footer={
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>
@@ -137,7 +137,7 @@ export function PlacementEventDialog({
           </>
         ) : null}
 
-        {stage === "technical" || stage === "panel" ? (
+        {stage === "technical" || stage === "panel" || stage === "hr" ? (
           <>
             <Field label="Interview date">
               <Input type="date" value={form.event_date ?? ""} onChange={(e) => set("event_date", e.target.value)} />
@@ -159,14 +159,7 @@ export function PlacementEventDialog({
             <Field label="Interview link">
               <Input value={form.event_link ?? ""} onChange={(e) => set("event_link", e.target.value)} />
             </Field>
-            {stage === "technical" ? (
-              <Field label="Interviewer">
-                <Input
-                  value={form.interviewer_name ?? ""}
-                  onChange={(e) => set("interviewer_name", e.target.value)}
-                />
-              </Field>
-            ) : (
+            {stage === "panel" ? (
               <Field label="Panel members" className="sm:col-span-2">
                 <Input
                   value={form.panel_members ?? ""}
@@ -174,11 +167,36 @@ export function PlacementEventDialog({
                   placeholder="Comma-separated names"
                 />
               </Field>
+            ) : (
+              <Field label="Interviewer">
+                <Input
+                  value={form.interviewer_name ?? ""}
+                  onChange={(e) => set("interviewer_name", e.target.value)}
+                />
+              </Field>
             )}
             <Field label="Status">
               <Select value={form.status ?? ""} onChange={(e) => set("status", e.target.value || null)}>
                 <option value="">Select…</option>
                 {STAGE_STATUS_OPTIONS[stage].map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </>
+        ) : null}
+
+        {stage === "rejected" ? (
+          <>
+            <Field label="Rejected date">
+              <Input type="date" value={form.event_date ?? ""} onChange={(e) => set("event_date", e.target.value)} />
+            </Field>
+            <Field label="Status">
+              <Select value={form.status ?? ""} onChange={(e) => set("status", e.target.value || null)}>
+                <option value="">Select…</option>
+                {STAGE_STATUS_OPTIONS.rejected.map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>

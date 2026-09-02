@@ -188,9 +188,9 @@ export default function AdminDashboardPage() {
                 to="/admin/placement"
               />
               <StatCard
-                label="Technical"
+                label="Interview"
                 value={data.pipeline.technical}
-                hint="Technical interview rounds"
+                hint="Interview rounds"
                 icon={Target}
                 tone="warning"
                 to="/admin/placement"

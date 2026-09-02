@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { APP_STATUSES, type JobApplication } from "@/hooks/useJobApplications";
 import { getTodayCST, getWeekRangeCST } from "@/lib/timezone";
 import { PLACEMENT_STAGES } from "@/lib/constants";
+import { normalizeStage } from "@/features/placement/constants";
 
 export interface StudentPortalStats {
   today: string;
@@ -55,7 +56,8 @@ export function useStudentPortalStats(studentId: string | undefined) {
 
       const stageMap: Record<string, number> = {};
       for (const e of pipelineRes.data ?? []) {
-        stageMap[e.stage] = (stageMap[e.stage] ?? 0) + 1;
+        const key = normalizeStage(e.stage);
+        stageMap[key] = (stageMap[key] ?? 0) + 1;
       }
       const byStage = PLACEMENT_STAGES.map((s) => ({
         stage: s.key,
@@ -64,7 +66,7 @@ export function useStudentPortalStats(studentId: string | undefined) {
       }));
 
       const interviews = (pipelineRes.data ?? []).filter((e) =>
-        ["screening", "technical", "panel"].includes(e.stage),
+        ["screening", "technical", "panel", "hr"].includes(normalizeStage(e.stage)),
       ).length;
       const offers = stageMap.offer ?? 0;
 

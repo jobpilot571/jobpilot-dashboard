@@ -41,7 +41,7 @@ export function StudentOverviewTab({
               <StatCard label="Applications" value={stats.todayApps} icon={Briefcase} />
               <StatCard label="Assessments" value={stats.todayAssessments} icon={ClipboardCheck} tone="info" />
               <StatCard label="Screening" value={stats.todayScreening} icon={Users} />
-              <StatCard label="Technical" value={stats.todayTechnical} icon={Mic2} tone="info" />
+              <StatCard label="Interview" value={stats.todayTechnical} icon={Mic2} tone="info" />
               <StatCard label="Panel" value={stats.todayPanel} icon={Layers} tone="warning" />
             </>
           )}
@@ -60,7 +60,7 @@ export function StudentOverviewTab({
               <StatCard label="Total applications" value={stats.totalApps} icon={Briefcase} />
               <StatCard label="Total assessments" value={stats.totalAssessments} icon={ClipboardCheck} tone="info" />
               <StatCard label="Screening" value={stats.totalScreening} icon={Users} />
-              <StatCard label="Technical" value={stats.totalTechnical} icon={Mic2} tone="info" />
+              <StatCard label="Interview" value={stats.totalTechnical} icon={Mic2} tone="info" />
               <StatCard label="Panel" value={stats.totalPanel} icon={Layers} tone="warning" />
             </>
           )}

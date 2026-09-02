@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { PipelineStage } from "@/features/placement/constants";
+import { normalizeStage, type PipelineStage } from "@/features/placement/constants";
 
 export interface PipelineEvent {
   id: string;
@@ -47,7 +47,9 @@ export interface PlacementSummaryRow {
   screening_count: number;
   technical_count: number;
   panel_count: number;
+  hr_count: number;
   offer_count: number;
+  rejected_count: number;
   last_pipeline_at: string | null;
   last_interview_offer_at: string | null;
   last_early_stage_at: string | null;
@@ -55,16 +57,24 @@ export interface PlacementSummaryRow {
   has_needs_update: boolean;
 }
 
-export function usePipelineEvents() {
+function mapEvents(rows: unknown[] | null): PipelineEvent[] {
+  return ((rows ?? []) as PipelineEvent[]).map((e) => ({
+    ...e,
+    stage: normalizeStage(e.stage),
+  }));
+}
+
+export function usePipelineEvents(enabled = true) {
   return useQuery({
     queryKey: ["pipeline_events"],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("placement_pipeline_events")
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as PipelineEvent[];
+      return mapEvents(data);
     },
   });
 }
@@ -78,10 +88,9 @@ export function useStudentPipelineEvents(studentId: string | undefined) {
         .from("placement_pipeline_events")
         .select("*")
         .eq("student_id", studentId!)
-        .in("stage", ["assessment", "ai_screening", "screening", "technical", "panel"])
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as PipelineEvent[];
+      return mapEvents(data);
     },
   });
 }
@@ -109,7 +118,9 @@ export function usePlacementSummary() {
         screening_count: Number(r.screening_count) || 0,
         technical_count: Number(r.technical_count) || 0,
         panel_count: Number(r.panel_count) || 0,
+        hr_count: Number(r.hr_count) || 0,
         offer_count: Number(r.offer_count) || 0,
+        rejected_count: Number(r.rejected_count) || 0,
         last_pipeline_at: (r.last_pipeline_at as string | null) ?? null,
         last_interview_offer_at: (r.last_interview_offer_at as string | null) ?? null,
         last_early_stage_at: (r.last_early_stage_at as string | null) ?? null,
@@ -124,33 +135,42 @@ export function usePlacementTotals() {
   return useQuery({
     queryKey: ["placement_totals"],
     queryFn: async () => {
-      const [appsRes, studentsRes, assessmentRes, screeningRes, technicalRes, panelRes, offerRes] =
-        await Promise.all([
-          supabase.from("job_applications").select("*", { count: "exact", head: true }),
-          supabase.from("students").select("*", { count: "exact", head: true }).neq("status", "inactive"),
-          supabase
-            .from("placement_pipeline_events")
-            .select("*", { count: "exact", head: true })
-            .eq("stage", "assessment"),
-          supabase
-            .from("placement_pipeline_events")
-            .select("*", { count: "exact", head: true })
-            .eq("stage", "screening"),
-          supabase
-            .from("placement_pipeline_events")
-            .select("*", { count: "exact", head: true })
-            .eq("stage", "technical"),
-          supabase
-            .from("placement_pipeline_events")
-            .select("*", { count: "exact", head: true })
-            .eq("stage", "panel"),
-          supabase
-            .from("placement_pipeline_events")
-            .select("*", { count: "exact", head: true })
-            .eq("stage", "offer"),
-        ]);
+      const [
+        appsRes,
+        studentsRes,
+        assessmentRes,
+        screeningRes,
+        technicalRes,
+        panelRes,
+        hrRes,
+        offerRes,
+        rejectedRes,
+      ] = await Promise.all([
+        supabase.from("job_applications").select("*", { count: "exact", head: true }),
+        supabase.from("students").select("*", { count: "exact", head: true }).neq("status", "inactive"),
+        supabase.from("placement_pipeline_events").select("*", { count: "exact", head: true }).eq("stage", "assessment"),
+        supabase
+          .from("placement_pipeline_events")
+          .select("*", { count: "exact", head: true })
+          .in("stage", ["screening", "ai_screening"]),
+        supabase.from("placement_pipeline_events").select("*", { count: "exact", head: true }).eq("stage", "technical"),
+        supabase.from("placement_pipeline_events").select("*", { count: "exact", head: true }).eq("stage", "panel"),
+        supabase.from("placement_pipeline_events").select("*", { count: "exact", head: true }).eq("stage", "hr"),
+        supabase.from("placement_pipeline_events").select("*", { count: "exact", head: true }).eq("stage", "offer"),
+        supabase.from("placement_pipeline_events").select("*", { count: "exact", head: true }).eq("stage", "rejected"),
+      ]);
 
-      for (const res of [appsRes, studentsRes, assessmentRes, screeningRes, technicalRes, panelRes, offerRes]) {
+      for (const res of [
+        appsRes,
+        studentsRes,
+        assessmentRes,
+        screeningRes,
+        technicalRes,
+        panelRes,
+        hrRes,
+        offerRes,
+        rejectedRes,
+      ]) {
         if (res.error) throw res.error;
       }
 
@@ -161,7 +181,9 @@ export function usePlacementTotals() {
         screening: screeningRes.count ?? 0,
         technical: technicalRes.count ?? 0,
         panel: panelRes.count ?? 0,
+        hr: hrRes.count ?? 0,
         offer: offerRes.count ?? 0,
+        rejected: rejectedRes.count ?? 0,
       };
     },
   });
@@ -229,11 +251,17 @@ export function useDeletePipelineEvent() {
   });
 }
 
-/** Upload a forwarded-email screenshot into the resumes bucket (screenshots/ prefix). */
+/** Upload a forwarded-email screenshot or offer letter into the resumes bucket (screenshots/ prefix). */
 export function useUploadPipelineScreenshot() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { eventId: string; studentId: string; file: File }) => {
+    mutationFn: async (input: {
+      eventId: string;
+      studentId: string;
+      file: File;
+      field?: "screenshot_url" | "document_url";
+    }) => {
+      const field = input.field ?? "screenshot_url";
       const ext = input.file.name.split(".").pop()?.toLowerCase() || "png";
       const path = `screenshots/${input.studentId}/${input.eventId}-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from("resumes").upload(path, input.file, {
@@ -249,10 +277,12 @@ export function useUploadPipelineScreenshot() {
           .createSignedUrl(path, 60 * 60 * 24 * 365);
         url = signed?.signedUrl ?? "";
       }
-      if (!url) throw new Error("Could not get screenshot URL");
+      if (!url) throw new Error("Could not get file URL");
+      const patch =
+        field === "document_url" ? { document_url: url } : { screenshot_url: url };
       const { error } = await supabase
         .from("placement_pipeline_events")
-        .update({ screenshot_url: url })
+        .update(patch)
         .eq("id", input.eventId);
       if (error) throw error;
       return url;

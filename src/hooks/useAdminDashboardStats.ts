@@ -158,7 +158,7 @@ export function useAdminDashboardStats() {
               supabase
                 .from("placement_pipeline_events")
                 .select("id", { count: "exact", head: true })
-                .in("stage", ["screening", "technical", "panel"]),
+                .in("stage", ["screening", "technical", "panel", "hr"]),
             ),
             countOrZero(
               supabase
