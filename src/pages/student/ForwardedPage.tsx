@@ -19,8 +19,8 @@ export default function StudentForwardedPage() {
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight">Placement</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Track forwarded applications across Assessment, Screening, Interview, Panel, HR, Offer letter,
-            and Rejected. You can add cards and upload screenshots; only an admin can delete.
+            Track forwarded applications by bucket. Click Assessment, Screening, Interview, and so on
+            to see that section. You can add cards and upload screenshots; only an admin can delete.
           </p>
         </div>
 

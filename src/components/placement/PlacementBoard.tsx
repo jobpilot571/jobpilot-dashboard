@@ -11,6 +11,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { getInitials } from "@/features/employees/constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,6 +82,8 @@ export function PlacementBoard({
   const uploadShot = useUploadPipelineScreenshot();
 
   const [search, setSearch] = useState("");
+  const [bucket, setBucket] = useState<ForwardStageKey>("assessment");
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
 
@@ -130,6 +133,31 @@ export function PlacementBoard({
     return map;
   }, [cards]);
 
+  const stageCards = byStage[bucket];
+
+  const studentGroups = useMemo(() => {
+    const map = new Map<string, PipelineEvent[]>();
+    for (const e of stageCards) {
+      const list = map.get(e.student_id) ?? [];
+      list.push(e);
+      map.set(e.student_id, list);
+    }
+    return Array.from(map.entries())
+      .map(([id, items]) => ({
+        studentId: id,
+        student: studentsById[id],
+        cards: items,
+      }))
+      .sort((a, b) => (a.student?.name ?? "Unknown").localeCompare(b.student?.name ?? "Unknown"));
+  }, [stageCards, studentsById]);
+
+  const selectBucket = (key: ForwardStageKey) => {
+    setBucket(key);
+    setStage(key);
+    setExpandedStudentId(null);
+    setExpandedId(null);
+  };
+
   const resetForm = () => {
     setLink("");
     setCompany("");
@@ -175,6 +203,8 @@ export function PlacementBoard({
       toast.success(`Added to ${placementStageLabel(stage)}.`);
       resetForm();
       setFormOpen(false);
+      setBucket(stage);
+      setExpandedStudentId(sid);
       setExpandedId(created.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save forwarded application.");
@@ -217,6 +247,51 @@ export function PlacementBoard({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save.");
     }
+  };
+
+  const renderCard = (e: PipelineEvent, showName?: boolean) => {
+    const appId = parseAppIdFromForwardNote(e.notes);
+    const linked = appId ? appsById[appId] : undefined;
+    const student = studentsById[e.student_id];
+    const linkedResume = linked?.resume_file_url || null;
+    const isOffer = normalizeStage(e.stage) === "offer";
+    const offerLetterUrl =
+      isOffer && e.document_url && e.document_url !== linkedResume ? e.document_url : null;
+    return (
+      <PipelineCard
+        key={e.id}
+        event={e}
+        expanded={expandedId === e.id}
+        onToggle={() => setExpandedId((id) => (id === e.id ? null : e.id))}
+        studentName={showName ? student?.name : undefined}
+        appliedAt={linked?.applied_at ?? linked?.applied_date}
+        resumeUrl={linkedResume || (!isOffer ? e.document_url : null)}
+        offerLetterUrl={offerLetterUrl}
+        defaultLink={e.event_link || linked?.applied_link || ""}
+        onSave={(patch) => void saveRow(e, patch)}
+        onMove={(next) => void moveCard(e, next)}
+        onUploadScreenshot={(file, field) => {
+          uploadShot.mutate(
+            { eventId: e.id, studentId: e.student_id, file, field },
+            {
+              onSuccess: () =>
+                toast.success(field === "document_url" ? "Offer letter uploaded." : "Screenshot uploaded."),
+              onError: (err) => toast.error(err instanceof Error ? err.message : "Upload failed."),
+            },
+          );
+        }}
+        uploadingShot={uploadShot.isPending}
+        canDelete={canDelete}
+        onDelete={() => {
+          if (confirm("Delete this placement card? Only admins can do this.")) {
+            remove.mutate(e.id, {
+              onSuccess: () => toast.success("Card deleted."),
+              onError: (err) => toast.error(err instanceof Error ? err.message : "Delete failed."),
+            });
+          }
+        }}
+      />
+    );
   };
 
   return (
@@ -402,87 +477,103 @@ export function PlacementBoard({
         </Card>
       ) : null}
 
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
+        {FORWARD_STAGES.map((s) => {
+          const selected = bucket === s.key;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => selectBucket(s.key)}
+              className={cn(
+                "rounded-xl border p-3 text-left shadow-sm transition",
+                selected
+                  ? cn("ring-2 ring-primary/30", STAGE_COLUMN_TONE[s.key])
+                  : "border-border bg-card hover:border-primary/40 hover:bg-muted/40",
+              )}
+            >
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{s.label}</p>
+              <p className="mt-1 font-display text-xl font-semibold tabular-nums">{byStage[s.key].length}</p>
+            </button>
+          );
+        })}
+      </div>
+
       {isLoading ? (
-        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-7">
-          {STAGE_ORDER.map((key) => (
-            <Skeleton key={key} className="h-64 rounded-xl" />
-          ))}
+        <div className="space-y-2">
+          <Skeleton className="h-16 w-full rounded-xl" />
+          <Skeleton className="h-16 w-full rounded-xl" />
+          <Skeleton className="h-16 w-full rounded-xl" />
         </div>
       ) : (
-        <div className="-mx-1 overflow-x-auto pb-2">
-          <div className="flex min-w-[84rem] gap-3 px-1">
-            {FORWARD_STAGES.map((s) => (
-              <section
-                key={s.key}
-                className={cn(
-                  "flex w-[16.5rem] shrink-0 flex-col rounded-xl border p-2 shadow-sm",
-                  STAGE_COLUMN_TONE[s.key],
-                )}
-              >
-                <header className="mb-2 flex items-center justify-between gap-2 px-1 py-1">
-                  <h3 className="text-sm font-semibold text-foreground">{s.label}</h3>
-                  <Badge className="border-border/70 bg-white/80 tabular-nums text-muted-foreground">
-                    {byStage[s.key].length}
-                  </Badge>
-                </header>
-                <div className="flex min-h-[12rem] flex-1 flex-col gap-2">
-                  {byStage[s.key].length === 0 ? (
-                    <p className="px-2 py-8 text-center text-xs text-muted-foreground">No cards</p>
-                  ) : (
-                    byStage[s.key].map((e) => {
-                      const appId = parseAppIdFromForwardNote(e.notes);
-                      const linked = appId ? appsById[appId] : undefined;
-                      const student = studentsById[e.student_id];
-                      const linkedResume = linked?.resume_file_url || null;
-                      const isOffer = normalizeStage(e.stage) === "offer";
-                      const offerLetterUrl =
-                        isOffer && e.document_url && e.document_url !== linkedResume ? e.document_url : null;
-                      return (
-                        <PipelineCard
-                          key={e.id}
-                          event={e}
-                          expanded={expandedId === e.id}
-                          onToggle={() => setExpandedId((id) => (id === e.id ? null : e.id))}
-                          studentName={showStudentName ? student?.name : undefined}
-                          appliedAt={linked?.applied_at ?? linked?.applied_date}
-                          resumeUrl={linkedResume || (!isOffer ? e.document_url : null)}
-                          offerLetterUrl={offerLetterUrl}
-                          defaultLink={e.event_link || linked?.applied_link || ""}
-                          onSave={(patch) => void saveRow(e, patch)}
-                          onMove={(next) => void moveCard(e, next)}
-                          onUploadScreenshot={(file, field) => {
-                            uploadShot.mutate(
-                              { eventId: e.id, studentId: e.student_id, file, field },
-                              {
-                                onSuccess: () =>
-                                  toast.success(
-                                    field === "document_url" ? "Offer letter uploaded." : "Screenshot uploaded.",
-                                  ),
-                                onError: (err) =>
-                                  toast.error(err instanceof Error ? err.message : "Upload failed."),
-                              },
-                            );
-                          }}
-                          uploadingShot={uploadShot.isPending}
-                          canDelete={canDelete}
-                          onDelete={() => {
-                            if (confirm("Delete this placement card? Only admins can do this.")) {
-                              remove.mutate(e.id, {
-                                onSuccess: () => toast.success("Card deleted."),
-                                onError: (err) =>
-                                  toast.error(err instanceof Error ? err.message : "Delete failed."),
-                              });
-                            }
-                          }}
-                        />
-                      );
-                    })
-                  )}
-                </div>
-              </section>
-            ))}
-          </div>
-        </div>
+        <Card className={cn("border", STAGE_COLUMN_TONE[bucket])}>
+          <CardHeader className="pb-2">
+            <CardTitle className="font-display text-base">
+              {placementStageLabel(bucket)}
+            </CardTitle>
+            <CardDescription>
+              {scoped || !showStudentName
+                ? `${stageCards.length} card${stageCards.length === 1 ? "" : "s"} in this bucket.`
+                : `${studentGroups.length} student${studentGroups.length === 1 ? "" : "s"} · ${stageCards.length} card${stageCards.length === 1 ? "" : "s"}. Click a student to see their cards.`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {stageCards.length === 0 ? (
+              <p className="px-2 py-10 text-center text-sm text-muted-foreground">
+                No applications in {placementStageLabel(bucket)} yet.
+              </p>
+            ) : scoped || !showStudentName ? (
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{stageCards.map((e) => renderCard(e))}</div>
+            ) : (
+              studentGroups.map((group) => {
+                const open = expandedStudentId === group.studentId;
+                const name = group.student?.name || "Unknown student";
+                const email = group.student?.email || "";
+                return (
+                  <div
+                    key={group.studentId}
+                    className={cn(
+                      "overflow-hidden rounded-xl border border-border bg-card",
+                      open && "ring-2 ring-primary/15",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedStudentId((id) => (id === group.studentId ? null : group.studentId))
+                      }
+                      className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40 sm:px-4"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {getInitials(name)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-display font-semibold text-foreground">{name}</p>
+                        {email ? (
+                          <p className="truncate text-xs text-muted-foreground">{email}</p>
+                        ) : null}
+                      </div>
+                      <Badge className="border-border bg-muted tabular-nums text-muted-foreground">
+                        {group.cards.length} {group.cards.length === 1 ? "card" : "cards"}
+                      </Badge>
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 shrink-0 text-muted-foreground transition",
+                          open && "rotate-180",
+                        )}
+                      />
+                    </button>
+                    {open ? (
+                      <div className="grid gap-2 border-t border-border bg-muted/20 p-3 sm:grid-cols-2 xl:grid-cols-3 sm:p-4">
+                        {group.cards.map((e) => renderCard(e))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -578,7 +669,7 @@ function PipelineCard({
         <ChevronDown className={cn("mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition", expanded && "rotate-180")} />
       </button>
 
-      {event.screenshot_url && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(event.screenshot_url) ? (
+      {expanded && event.screenshot_url && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(event.screenshot_url) ? (
         <a href={event.screenshot_url} target="_blank" rel="noreferrer" className="block border-t border-border/60">
           <img
             src={event.screenshot_url}

@@ -195,8 +195,8 @@ export function PlacementWorkspace({ role }: { role: AppRole }) {
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight">Placement</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Each forwarded application is one card. Change its status to move it across Assessment,
-            Screening, Interview, Panel, HR, Offer letter, or Rejected.
+            Open a bucket (Assessment, Screening, Interview, and so on), then click a student to see
+            their cards. Changing a card&apos;s status moves it to that bucket.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -206,7 +206,7 @@ export function PlacementWorkspace({ role }: { role: AppRole }) {
               className={`rounded-md px-3 py-1.5 ${view === "board" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
               onClick={() => setView("board")}
             >
-              Pipeline board
+              Pipeline
             </button>
             <button
               type="button"
@@ -229,16 +229,6 @@ export function PlacementWorkspace({ role }: { role: AppRole }) {
         <StatCard label="Applications" value={t.apps} icon={Briefcase} tone="info" />
         <StatCard label="Interviews" value={interviews} icon={Target} tone="warning" />
         <StatCard label="Offers" value={liveCounts.offer} icon={GraduationCap} tone="success" />
-      </section>
-
-      <section className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
-        {STAGE_META.map((s) => (
-          <div key={s.key} className="rounded-xl border border-border bg-card p-3 shadow-sm">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{s.short}</p>
-            <p className="mt-1 font-display text-xl font-semibold tabular-nums">{liveCounts[s.key]}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{s.label}</p>
-          </div>
-        ))}
       </section>
 
       {view === "board" ? <PlacementBoard showStudentName /> : null}
