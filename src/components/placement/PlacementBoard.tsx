@@ -4,7 +4,6 @@ import {
   CalendarDays,
   ChevronDown,
   ExternalLink,
-  FileText,
   ImageIcon,
   Loader2,
   Plus,
@@ -523,7 +522,7 @@ export function PlacementBoard({
                 No applications in {placementStageLabel(bucket)} yet.
               </p>
             ) : scoped || !showStudentName ? (
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{stageCards.map((e) => renderCard(e))}</div>
+              <div className="space-y-2">{stageCards.map((e) => renderCard(e))}</div>
             ) : (
               studentGroups.map((group) => {
                 const open = expandedStudentId === group.studentId;
@@ -564,7 +563,7 @@ export function PlacementBoard({
                       />
                     </button>
                     {open ? (
-                      <div className="grid gap-2 border-t border-border bg-muted/20 p-3 sm:grid-cols-2 xl:grid-cols-3 sm:p-4">
+                      <div className="space-y-2 border-t border-border bg-muted/20 p-3 sm:p-4">
                         {group.cards.map((e) => renderCard(e))}
                       </div>
                     ) : null}
@@ -640,103 +639,118 @@ function PipelineCard({
         expanded && "ring-2 ring-primary/15",
       )}
     >
-      <button type="button" onClick={onToggle} className="flex w-full gap-2 px-2.5 py-2.5 text-left hover:bg-muted/40">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40"
+      >
         <img
           src={logo}
           alt=""
-          className="h-8 w-8 shrink-0 rounded-md border border-border bg-white object-contain p-0.5"
+          className="h-9 w-9 shrink-0 rounded-md border border-border bg-white object-contain p-0.5"
           onError={(e) => {
             (e.target as HTMLImageElement).style.visibility = "hidden";
           }}
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 sm:max-w-[28%]">
           {studentName ? (
             <p className="truncate text-[11px] font-medium text-muted-foreground">{studentName}</p>
           ) : null}
           <p className="truncate text-sm font-semibold text-foreground">{event.company_name || "Unknown company"}</p>
           <p className="truncate text-xs text-muted-foreground">{event.job_role || "No role"}</p>
-          <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
-            <span>Applied {appliedLabel === "—" ? "—" : appliedAt?.slice(0, 10) ?? appliedLabel}</span>
-            <span>Fwd {event.event_date || formatDateCST(event.created_at)}</span>
-          </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            <Badge className={cn("border text-[10px]", STAGE_TONE[stage])}>{label}</Badge>
-            {event.screenshot_url ? (
-              <Badge className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-800">Shot</Badge>
-            ) : null}
-          </div>
         </div>
-        <ChevronDown className={cn("mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition", expanded && "rotate-180")} />
+        <div className="hidden min-w-[7.5rem] shrink-0 sm:block">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Applied</p>
+          <p className="text-xs font-medium tabular-nums text-foreground">
+            {appliedLabel === "—" ? "—" : appliedAt?.slice(0, 10) ?? appliedLabel}
+          </p>
+        </div>
+        <div className="hidden min-w-[7.5rem] shrink-0 md:block">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Forwarded</p>
+          <p className="text-xs font-medium tabular-nums text-foreground">
+            {event.event_date || formatDateCST(event.created_at)}
+          </p>
+        </div>
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1">
+          <Badge className={cn("border text-[10px]", STAGE_TONE[stage])}>{label}</Badge>
+          {event.screenshot_url ? (
+            <Badge className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-800">Shot</Badge>
+          ) : null}
+        </div>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-muted-foreground transition", expanded && "rotate-180")}
+        />
       </button>
 
-      {expanded && event.screenshot_url && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(event.screenshot_url) ? (
-        <a href={event.screenshot_url} target="_blank" rel="noreferrer" className="block border-t border-border/60">
-          <img
-            src={event.screenshot_url}
-            alt="Forwarded email screenshot"
-            className="max-h-24 w-full bg-white object-cover"
-          />
-        </a>
-      ) : null}
-
       {expanded ? (
-        <div className="space-y-3 border-t border-border bg-muted/15 px-2.5 py-3">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Application status
-            </label>
-            <Select
-              className="h-8"
-              value={stage}
-              onChange={(e) => onMove(e.target.value as ForwardStageKey)}
-            >
-              {FORWARD_STAGES.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-            <p className="text-[11px] text-muted-foreground">Changing status moves this card to that bucket.</p>
-          </div>
+        <div className="space-y-3 border-t border-border bg-muted/15 px-3 py-3">
+          <div className="grid gap-3 lg:grid-cols-[11rem_minmax(0,1fr)]">
+            {event.screenshot_url && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(event.screenshot_url) ? (
+              <a href={event.screenshot_url} target="_blank" rel="noreferrer" className="block">
+                <img
+                  src={event.screenshot_url}
+                  alt="Forwarded email screenshot"
+                  className="h-28 w-full rounded-lg border border-border bg-white object-contain"
+                />
+              </a>
+            ) : (
+              <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-border bg-card text-xs text-muted-foreground">
+                No screenshot
+              </div>
+            )}
 
-          <div className="grid gap-2">
-            <MetaChip icon={CalendarDays} label="Application start" value={appliedLabel} />
-            <div className="space-y-1 rounded-lg border border-border bg-card px-2.5 py-2">
-              <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Forwarded date
-              </label>
-              <Input type="date" className="h-8" value={fwdDate} onChange={(e) => setFwdDate(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Application link
-            </label>
-            <div className="flex gap-1.5">
-              <Input
-                className="h-8"
-                placeholder="https://…"
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-              />
-              {link.trim() ? (
-                <a
-                  href={link.trim()}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-8 shrink-0 items-center rounded-md border border-border bg-card px-2 text-xs text-primary hover:bg-muted"
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Application status
+                </label>
+                <Select
+                  className="h-8"
+                  value={stage}
+                  onChange={(e) => onMove(e.target.value as ForwardStageKey)}
                 >
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              ) : null}
+                  {FORWARD_STAGES.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <MetaChip icon={CalendarDays} label="Application start" value={appliedLabel} />
+              <div className="space-y-1 rounded-lg border border-border bg-card px-2.5 py-2">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Forwarded date
+                </label>
+                <Input type="date" className="h-8" value={fwdDate} onChange={(e) => setFwdDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Application link
+                </label>
+                <div className="flex gap-1.5">
+                  <Input
+                    className="h-8"
+                    placeholder="https://…"
+                    value={link}
+                    onChange={(e) => setLink(e.target.value)}
+                  />
+                  {link.trim() ? (
+                    <a
+                      href={link.trim()}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-8 shrink-0 items-center rounded-md border border-border bg-card px-2 text-xs text-primary hover:bg-muted"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </div>
+          <p className="text-[11px] text-muted-foreground">Changing status moves this card to that bucket.</p>
 
-          <div className="space-y-1.5">
-            <label className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              <ImageIcon className="h-3.5 w-3.5" /> Forwarded email screenshot
-            </label>
+          <div className="flex flex-wrap items-center gap-2">
             <input
               ref={shotRef}
               type="file"
@@ -748,49 +762,40 @@ function PipelineCard({
                 e.target.value = "";
               }}
             />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={uploadingShot}
-                onClick={() => shotRef.current?.click()}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={uploadingShot}
+              onClick={() => shotRef.current?.click()}
+            >
+              {uploadingShot ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
+              {event.screenshot_url ? "Replace screenshot" : "Upload screenshot"}
+            </Button>
+            {event.screenshot_url ? (
+              <a
+                href={event.screenshot_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-medium text-primary hover:underline"
               >
-                {uploadingShot ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                {event.screenshot_url ? "Replace" : "Upload"}
-              </Button>
-              {event.screenshot_url ? (
-                <a
-                  href={event.screenshot_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-medium text-primary hover:underline"
-                >
-                  View
-                </a>
-              ) : (
-                <span className="text-xs text-muted-foreground">None yet</span>
-              )}
-            </div>
-          </div>
+                View screenshot
+              </a>
+            ) : null}
 
-          {stage === "offer" ? (
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                <FileText className="h-3.5 w-3.5" /> Offer letter
-              </label>
-              <input
-                ref={letterRef}
-                type="file"
-                accept="image/*,.png,.jpg,.jpeg,.webp,.pdf"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) onUploadScreenshot(file, "document_url");
-                  e.target.value = "";
-                }}
-              />
-              <div className="flex flex-wrap items-center gap-2">
+            {stage === "offer" ? (
+              <>
+                <input
+                  ref={letterRef}
+                  type="file"
+                  accept="image/*,.png,.jpg,.jpeg,.webp,.pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) onUploadScreenshot(file, "document_url");
+                    e.target.value = "";
+                  }}
+                />
                 <Button
                   type="button"
                   size="sm"
@@ -811,20 +816,20 @@ function PipelineCard({
                     View letter
                   </a>
                 ) : null}
-              </div>
-            </div>
-          ) : null}
+              </>
+            ) : null}
 
-          {resumeUrl && resumeUrl !== offerLetterUrl ? (
-            <a
-              href={resumeUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-medium text-foreground hover:underline"
-            >
-              <Upload className="h-3 w-3" /> Resume
-            </a>
-          ) : null}
+            {resumeUrl && resumeUrl !== offerLetterUrl ? (
+              <a
+                href={resumeUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-foreground hover:underline"
+              >
+                <Upload className="h-3 w-3" /> Resume
+              </a>
+            ) : null}
+          </div>
 
           <div className="space-y-1">
             <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -834,26 +839,26 @@ function PipelineCard({
               value={jd}
               onChange={(e) => setJd(e.target.value)}
               placeholder="Paste JD…"
-              className="min-h-[80px] w-full rounded-lg border border-input bg-card px-2.5 py-2 text-sm"
+              className="min-h-[72px] w-full rounded-lg border border-input bg-card px-2.5 py-2 text-sm"
             />
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            className="w-full"
-            onClick={() => onSave({ event_link: link.trim(), event_date: fwdDate, jd })}
-          >
-            Save details
-          </Button>
-
-          {canDelete ? (
-            <Button type="button" size="sm" variant="ghost" className="w-full text-destructive" onClick={onDelete}>
-              <Trash2 className="h-3.5 w-3.5" /> Delete card
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {canDelete ? (
+              <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
+                <Trash2 className="h-3.5 w-3.5" /> Delete card
+              </Button>
+            ) : (
+              <p className="mr-auto text-[11px] text-muted-foreground">Only an admin can delete cards.</p>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => onSave({ event_link: link.trim(), event_date: fwdDate, jd })}
+            >
+              Save details
             </Button>
-          ) : (
-            <p className="text-center text-[11px] text-muted-foreground">Only an admin can delete cards.</p>
-          )}
+          </div>
         </div>
       ) : null}
     </div>
