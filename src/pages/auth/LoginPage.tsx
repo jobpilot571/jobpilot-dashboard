@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { LoadingScreen } from "@/components/auth/LoadingScreen";
+import { MissingRoleScreen } from "@/components/auth/MissingRoleScreen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +23,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   if (configError) return <LoadingScreen message={configError} />;
   if (loading) return <LoadingScreen />;
@@ -31,6 +31,8 @@ export default function LoginPage() {
     const redirect = safeAppPath(searchParams.get("redirect"));
     return <Navigate to={redirect || ROLE_HOME[role]} replace />;
   }
+
+  if (user && !role) return <MissingRoleScreen />;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -42,8 +44,7 @@ export default function LoginPage() {
       return;
     }
     toast.success("Signed in");
-    // Role load happens via AuthContext; Navigate above will kick in after role resolves.
-    navigate("/");
+    // Stay on /login until AuthContext has a role; the Navigate above then sends them home.
   };
 
   return (

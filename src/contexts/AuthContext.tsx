@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -28,13 +29,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-async function fetchRole(userId: string): Promise<AppRole | null> {
+type RoleFetch = { role: AppRole | null; failed: boolean };
+
+async function fetchRole(userId: string): Promise<RoleFetch> {
   const { data, error } = await supabase.from("users").select("role").eq("id", userId).maybeSingle();
   if (error) {
     console.error("Failed to fetch role:", error);
-    return null;
+    return { role: null, failed: true };
   }
-  return (data?.role as AppRole | undefined) ?? null;
+  return { role: (data?.role as AppRole | undefined) ?? null, failed: false };
 }
 
 async function fetchMustChangePassword(userId: string): Promise<boolean> {
@@ -83,8 +86,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [loading, setLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
+  const loadIdRef = useRef(0);
+  const roleRef = useRef<AppRole | null>(null);
+  roleRef.current = role;
+  const sessionRef = useRef<Session | null>(null);
+  sessionRef.current = session;
 
   const loadProfile = useCallback(async (nextSession: Session | null) => {
+    const loadId = ++loadIdRef.current;
+
     if (!nextSession?.user) {
       setRole(null);
       setAccountStatus(null);
@@ -93,15 +103,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const fetchedRole = await fetchRole(nextSession.user.id);
+    if (!roleRef.current) setLoading(true);
+
+    let fetched: RoleFetch = { role: null, failed: true };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      fetched = await fetchRole(nextSession.user.id);
+      if (loadId !== loadIdRef.current) return;
+      if (!fetched.failed) break;
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 250));
+    }
+
+    if (loadId !== loadIdRef.current) return;
+
+    if (fetched.failed) {
+      // Transient error (common inside onAuthStateChange / token refresh). Keep any
+      // role we already have instead of wiping it and hanging on "Resolving your role".
+      setLoading(false);
+      return;
+    }
+
     const [status, forcePw] = await Promise.all([
-      fetchedRole
-        ? fetchAccountStatus(nextSession.user.id, fetchedRole, nextSession.user.email ?? undefined)
+      fetched.role
+        ? fetchAccountStatus(nextSession.user.id, fetched.role, nextSession.user.email ?? undefined)
         : Promise.resolve(null),
       fetchMustChangePassword(nextSession.user.id),
     ]);
 
-    setRole(fetchedRole);
+    if (loadId !== loadIdRef.current) return;
+
+    setRole(fetched.role);
     setAccountStatus(status);
     setMustChangePassword(forcePw);
     setLoading(false);
@@ -117,45 +147,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let mounted = true;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted) return;
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
-      void loadProfile(nextSession);
-    });
 
-    void supabase.auth.getSession().then(({ data: { session: existing } }) => {
-      if (!mounted) return;
-      setSession(existing);
-      setUser(existing?.user ?? null);
-      void loadProfile(existing);
+      // Never refetch profile on token refresh — a failed query here used to overwrite
+      // a valid role with null and leave employees stuck on "Resolving your role…".
+      if (event === "TOKEN_REFRESHED") return;
+
+      // Defer so we don't query PostgREST while the GoTrue client lock is held.
+      const timer = setTimeout(() => {
+        if (mounted) void loadProfile(nextSession);
+      }, 0);
+      timers.push(timer);
     });
 
     return () => {
       mounted = false;
+      timers.forEach(clearTimeout);
       subscription.unsubscribe();
     };
   }, [loadProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
+    setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
+    if (error) {
+      setLoading(false);
+      return { error: error.message };
+    }
     return { error: null };
   }, []);
 
   const signOut = useCallback(async () => {
+    loadIdRef.current += 1;
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
     setRole(null);
     setAccountStatus(null);
     setMustChangePassword(false);
+    setLoading(false);
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    await loadProfile(session);
-  }, [loadProfile, session]);
+    await loadProfile(sessionRef.current);
+  }, [loadProfile]);
 
   const value = useMemo(
     () => ({

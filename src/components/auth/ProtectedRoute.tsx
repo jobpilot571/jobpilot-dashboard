@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { LoadingScreen } from "@/components/auth/LoadingScreen";
 import { InactiveAccountScreen } from "@/components/auth/InactiveAccountScreen";
+import { MissingRoleScreen } from "@/components/auth/MissingRoleScreen";
 import { ROLE_HOME, type AppRole } from "@/lib/constants";
 
 export function ProtectedRoute({
@@ -29,7 +30,7 @@ export function ProtectedRoute({
   }
 
   if (!role) {
-    return <LoadingScreen message="Resolving your role…" />;
+    return <MissingRoleScreen />;
   }
 
   if (role !== allowedRole) {
