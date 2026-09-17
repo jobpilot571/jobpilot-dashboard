@@ -175,10 +175,6 @@ export function PlacementBoard({
       toast.error("Choose a student.");
       return;
     }
-    if (!link.trim()) {
-      toast.error("Application link is required.");
-      return;
-    }
     setSaving(true);
     try {
       const created = await upsert.mutateAsync({
@@ -187,7 +183,7 @@ export function PlacementBoard({
         stage,
         company_name: company.trim() || null,
         job_role: roleName.trim() || null,
-        event_link: link.trim(),
+        event_link: link.trim() || null,
         event_date: fwdDate || getTodayCST(),
         status: placementStageLabel(stage),
         notes: buildForwardNotes(null, jd),
@@ -404,11 +400,11 @@ export function PlacementBoard({
 
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Application link *
+                Application link (optional)
               </label>
               <Input
                 className="h-9"
-                placeholder="https://… job posting or application URL"
+                placeholder="https://… job posting or application URL (optional)"
                 value={link}
                 onChange={(e) => setLink(e.target.value)}
               />
@@ -465,7 +461,7 @@ export function PlacementBoard({
               <Button
                 type="button"
                 size="sm"
-                disabled={saving || !link.trim() || !(studentId || formStudentId)}
+                disabled={saving || !(studentId || formStudentId)}
                 onClick={() => void submitNew()}
               >
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
