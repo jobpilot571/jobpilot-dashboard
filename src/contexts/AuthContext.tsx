@@ -188,11 +188,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onSessionExpired = () => {
       toast.error("Your session expired. Sign in again — saved applications are still there.");
-      void signOut();
+      // Local only. A global sign-out revokes the refresh token and logs out
+      // every other open dashboard tab, which is what made this recur.
+      void supabase.auth.signOut({ scope: "local" });
     };
     window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
-  }, [signOut]);
+  }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     resetAuthFailureNotice();

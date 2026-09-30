@@ -76,6 +76,8 @@ export function useJobApplications(studentId: string | undefined) {
   return useQuery({
     queryKey: ["job_applications", studentId],
     enabled: !!studentId,
+    refetchOnWindowFocus: true,
+    retry: (failureCount, error) => !isAuthSessionError(error) && failureCount < 1,
     queryFn: async () => {
       const pageSize = 1000;
       const all: JobApplication[] = [];
