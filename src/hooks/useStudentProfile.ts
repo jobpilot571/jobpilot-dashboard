@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getErrorMessage, isAuthSessionError, toError } from "@/lib/errors";
 import { isMissingColumnError } from "@/lib/employees";
 import type { Student } from "@/lib/students";
 import { parseProfileJson, type StudentProfileJson } from "@/lib/studentProfile";
 import { getTodayCST, BUSINESS_TZ } from "@/lib/timezone";
-import { toError } from "@/lib/errors";
 
 const SELECT_FULL =
   "id, name, email, phone, program, status, assigned_to, last_assigned_to, inactive_at, inactive_reason, user_id, applied_date, documents_submitted, documents_total, created_at, joining_date, payment_status, payment_amount, payment_date, payment_method, payment_notes, last_active_at, profile_json";
@@ -134,7 +134,10 @@ export function useSaveStudentProfile(studentId: string | undefined) {
       void queryClient.invalidateQueries({ queryKey: ["students"] });
       toast.success("Profile saved.");
     },
-    onError: (err: Error) => toast.error(err.message || "Failed to save profile."),
+    onError: (err: unknown) => {
+      if (isAuthSessionError(err)) return;
+      toast.error(getErrorMessage(err, "Failed to save profile."));
+    },
   });
 }
 
@@ -186,6 +189,9 @@ export function useParseResumeProfile(studentId: string | undefined) {
       void queryClient.invalidateQueries({ queryKey: ["student", studentId] });
       toast.success("Resume parsed and profile updated.");
     },
-    onError: (err: Error) => toast.error(err.message || "Resume parse failed."),
+    onError: (err: unknown) => {
+      if (isAuthSessionError(err)) return;
+      toast.error(getErrorMessage(err, "Resume parse failed."));
+    },
   });
 }

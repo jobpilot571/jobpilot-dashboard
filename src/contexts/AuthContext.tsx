@@ -9,7 +9,9 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
+import { toast } from "sonner";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
+import { resetAuthFailureNotice, SESSION_EXPIRED_EVENT } from "@/lib/authFetch";
 import type { AppRole } from "@/lib/constants";
 
 type AccountStatus = "active" | "pending" | "inactive" | string;
@@ -172,16 +174,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [loadProfile]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setLoading(false);
-      return { error: error.message };
-    }
-    return { error: null };
-  }, []);
-
   const signOut = useCallback(async () => {
     loadIdRef.current += 1;
     await supabase.auth.signOut();
@@ -191,6 +183,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccountStatus(null);
     setMustChangePassword(false);
     setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const onSessionExpired = () => {
+      toast.error("Your session expired. Sign in again — saved applications are still there.");
+      void signOut();
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+  }, [signOut]);
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    resetAuthFailureNotice();
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setLoading(false);
+      return { error: error.message };
+    }
+    return { error: null };
   }, []);
 
   const refreshProfile = useCallback(async () => {

@@ -21,3 +21,11 @@ export function toError(error: unknown, fallback = "Request failed"): Error {
   if (error instanceof Error) return error;
   return new Error(getErrorMessage(error, fallback));
 }
+
+/** PostgREST returns this when the access token lapsed. The session handler signs the user back in. */
+export function isAuthSessionError(error: unknown): boolean {
+  const message = typeof error === "string" ? error : getErrorMessage(error, "");
+  return /jwt expired|invalid jwt|invalid claim|token (has|is) expired|refresh token|session expired/i.test(
+    message,
+  );
+}

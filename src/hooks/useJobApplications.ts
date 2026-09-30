@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getErrorMessage, isAuthSessionError } from "@/lib/errors";
 import { getNowCST } from "@/lib/timezone";
 import {
   DEFAULT_APPLICATION_SOURCE,
@@ -84,6 +85,7 @@ export function useJobApplications(studentId: string | undefined) {
           .select("*")
           .eq("student_id", studentId!)
           .order("applied_at", { ascending: false })
+          .order("id", { ascending: false })
           .range(from, from + pageSize - 1);
         if (error) throw error;
         const rows = (data ?? []) as JobApplication[];
@@ -110,6 +112,7 @@ export function useJobApplicationIndex(enabled = true) {
             "id, student_id, serial_no, applied_date, applied_link, job_role, company_name, applied_time, applied_at, resume_file_url, status, created_by_employee_id, created_at",
           )
           .order("applied_at", { ascending: false })
+          .order("id", { ascending: false })
           .range(from, from + pageSize - 1);
         if (error) throw error;
         const rows = (data ?? []) as JobApplication[];
@@ -189,8 +192,9 @@ export function useAddJobApplication(studentId: string | undefined) {
       void queryClient.invalidateQueries({ queryKey: ["student-overview-stats", studentId] });
       toast.success("Application saved.");
     },
-    onError: (err: Error) => {
-      toast.error(err.message || "Failed to add application.");
+    onError: (err: unknown) => {
+      if (isAuthSessionError(err)) return;
+      toast.error(getErrorMessage(err, "Failed to add application."));
     },
   });
 }
@@ -217,8 +221,9 @@ export function useUpdateJobApplication(studentId: string | undefined) {
       void queryClient.invalidateQueries({ queryKey: ["my-apps-history"] });
       toast.success("Application updated.");
     },
-    onError: (err: Error) => {
-      toast.error(err.message || "Failed to update application.");
+    onError: (err: unknown) => {
+      if (isAuthSessionError(err)) return;
+      toast.error(getErrorMessage(err, "Failed to update application."));
     },
   });
 }
@@ -258,7 +263,10 @@ export function useUploadApplicationResume(studentId: string | undefined) {
       void queryClient.invalidateQueries({ queryKey: ["job_applications", studentId] });
       toast.success("Resume attached to this application.");
     },
-    onError: (err: Error) => toast.error(err.message || "Resume upload failed."),
+    onError: (err: unknown) => {
+      if (isAuthSessionError(err)) return;
+      toast.error(getErrorMessage(err, "Resume upload failed."));
+    },
   });
 }
 
@@ -276,8 +284,9 @@ export function useDeleteJobApplication(studentId: string | undefined) {
       void queryClient.invalidateQueries({ queryKey: ["my-apps-history"] });
       toast.success("Application removed.");
     },
-    onError: (err: Error) => {
-      toast.error(err.message || "Failed to delete application.");
+    onError: (err: unknown) => {
+      if (isAuthSessionError(err)) return;
+      toast.error(getErrorMessage(err, "Failed to delete application."));
     },
   });
 }
@@ -297,6 +306,7 @@ export function useMyApplicationsHistory(
         .gte("applied_date", filters.dateFrom)
         .lte("applied_date", filters.dateTo)
         .order("applied_at", { ascending: false })
+        .order("id", { ascending: false })
         .limit(500);
 
       if (filters.studentId !== "all") {

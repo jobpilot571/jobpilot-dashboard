@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { bindAuthClient, createAuthAwareFetch, installSessionKeepAlive } from "@/lib/authFetch";
 import { createAuthStorage } from "@/lib/authStorage";
 import type { Database } from "./types";
 
@@ -26,5 +27,11 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(
       detectSessionInUrl: true,
       flowType: "pkce",
     },
+    global: {
+      fetch: createAuthAwareFetch(),
+    },
   },
 );
+
+bindAuthClient(() => supabase);
+installSessionKeepAlive();

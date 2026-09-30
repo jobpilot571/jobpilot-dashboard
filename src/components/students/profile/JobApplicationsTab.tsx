@@ -49,6 +49,7 @@ import {
   isApplicationSource,
   type ApplicationSource,
 } from "@/lib/applicationSources";
+import { getErrorMessage, isAuthSessionError } from "@/lib/errors";
 import { getNowCST, getTodayCST, formatTimeCST } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 
@@ -239,26 +240,33 @@ export function StudentJobApplicationsTab({
       });
       toast.success(`Forwarded to ${placementStageLabel(stage)}.`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to set forward stage.");
+      if (isAuthSessionError(err)) return;
+      toast.error(getErrorMessage(err, "Failed to set forward stage."));
     }
   };
 
   const saveDraft = () => {
-    if (!link.trim()) return;
+    const url = link.trim();
+    if (!url) return;
     if (status === "forwarded" && !draftStage) {
       toast.error("Choose Forwarded → a pipeline stage.");
       return;
     }
+    const savedSource = detectApplicationSource(url, source);
+    // LinkedIn / Dice / Jobright links are stored on their own tab. Stay on that tab
+    // so the new row is visible instead of vanishing from Career sites.
+    if (savedSource !== source) setSource(savedSource);
+    const stamp = getNowCST();
     add.mutate(
       {
-        applied_link: link.trim(),
+        applied_link: url,
         job_role: role.trim(),
         company_name: company.trim(),
         status,
         created_by_employee_id: employeeId ?? null,
-        applied_date: now.date,
-        applied_time: now.time,
-        application_source: detectApplicationSource(link, source),
+        applied_date: stamp.date,
+        applied_time: stamp.time,
+        application_source: savedSource,
       },
       {
         onSuccess: async (created) => {
@@ -283,7 +291,9 @@ export function StudentJobApplicationsTab({
     <div className="space-y-8">
       {isError ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          Could not load applications: {error instanceof Error ? error.message : "Unknown error"}
+          {isAuthSessionError(error)
+            ? "Your sign-in expired, so this list could not refresh. Saved application links are still stored — sign in again and they will show up."
+            : `Could not load applications: ${getErrorMessage(error, "Unknown error")}. Saved links were not deleted.`}
         </div>
       ) : null}
 
@@ -479,7 +489,7 @@ export function StudentJobApplicationsTab({
                       applyForwardStage={applyForwardStage}
                     />
                   ))}
-              {!isLoading && todayApps.length === 0 && !draftOpen ? (
+              {!isLoading && !isError && todayApps.length === 0 && !draftOpen ? (
                 <tr>
                   <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">
                     No {activeSourceLabel} applications logged today. Click Add Row, or open history below.
@@ -532,6 +542,10 @@ export function StudentJobApplicationsTab({
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
             </div>
+          ) : isError && sectionApps.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+              History could not be loaded. Previously saved links are still stored.
+            </p>
           ) : historyGroups.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-muted-foreground">
               No previous {activeSourceLabel} applications yet.
