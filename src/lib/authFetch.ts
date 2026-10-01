@@ -1,42 +1,45 @@
 /**
- * Access tokens expire about an hour after sign-in. A backgrounded tab
- * stops the SDK refresh timer, so the next save or reload can go out with a
- * dead JWT. PostgREST then returns "JWT expired", or — if the client falls
- * back to the anon key — row-level security returns zero rows and posted
- * application links look deleted.
+ * Employees keep several dashboard tabs open. Each tab used to refresh the
+ * sign-in on its own. Supabase rotates the refresh token, the other tabs
+ * lose that race, and the loser wipes the shared session — so everyone is
+ * sent to the login page about as often as the access token expires.
  *
- * This fetch does not call refreshSession(). That forces a second refresh
- * token rotation on top of the SDK's own refresh, and the loser of that
- * race clears the session for every open tab. getSession() joins the SDK's
- * single in-flight refresh instead.
+ * One visible tab owns the refresh timer. The others read the token it
+ * saved. A request never goes out as the anon key, and a lost refresh race
+ * does not sign the employee out.
  */
 
 type GetAuthClient = () => {
   auth: {
     getSession: () => Promise<{
-      data: { session: { access_token: string; expires_at?: number } | null };
+      data: { session: { access_token: string } | null };
     }>;
+    startAutoRefresh: () => Promise<void>;
+    stopAutoRefresh: () => Promise<void>;
   };
 };
 
 const rawFetch = globalThis.fetch.bind(globalThis);
-const SESSION_EXPIRED = "jobpilot:session-expired";
+const TAB_ID = Math.random().toString(36).slice(2);
+const REFRESH_LOCK = "jobpilot:refresh-lock";
+const LEADER_KEY = "jobpilot:auth-leader";
 
 let getAuthClient: GetAuthClient | null = null;
-let sessionRead: Promise<string | null> | null = null;
-let sessionExpiredNotified = false;
 let keepAliveInstalled = false;
+let leading = false;
 
 export function bindAuthClient(getter: GetAuthClient) {
   getAuthClient = getter;
 }
 
 export function resetAuthFailureNotice() {
-  sessionExpiredNotified = false;
+  /* kept so sign-in can clear any stale notice from older bundles */
 }
 
 export function isJwtExpiredMessage(message: string): boolean {
-  return /jwt expired|invalid jwt|invalid claim|token (has|is) expired|pgrst301|pgrst303/i.test(message);
+  return /jwt expired|invalid jwt|invalid claim|token (has|is) expired|pgrst301|pgrst303|session expired/i.test(
+    message,
+  );
 }
 
 function requestUrl(input: RequestInfo | URL): string {
@@ -85,53 +88,95 @@ function isAnonJwt(token: string): boolean {
   return jwtPayload(token)?.role === "anon";
 }
 
-/** True when the access token is already expired or will be within 30 seconds. */
 function tokenIsExpired(token: string): boolean {
   const exp = jwtPayload(token)?.exp;
   if (typeof exp !== "number") return false;
-  return exp * 1000 <= Date.now() + 30_000;
+  return exp * 1000 <= Date.now();
+}
+
+function usableToken(token: string | null | undefined): string | null {
+  if (!token || isAnonJwt(token) || tokenIsExpired(token)) return null;
+  return token;
+}
+
+function readStoredAccessToken(): string | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith("sb-") || !key.endsWith("-auth-token")) continue;
+      const parsed = JSON.parse(localStorage.getItem(key) || "null") as { access_token?: string } | null;
+      const token = usableToken(parsed?.access_token);
+      if (token) return token;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForStoredToken(ms: number): Promise<string | null> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const token = readStoredAccessToken();
+    if (token) return token;
+    await sleep(200);
+  }
+  return readStoredAccessToken();
+}
+
+function tryLockRefresh(): boolean {
+  if (typeof localStorage === "undefined") return true;
+  const now = Date.now();
+  try {
+    const raw = localStorage.getItem(REFRESH_LOCK);
+    if (raw) {
+      const lock = JSON.parse(raw) as { id?: string; until?: number };
+      if (lock.id !== TAB_ID && typeof lock.until === "number" && lock.until > now) return false;
+    }
+    localStorage.setItem(REFRESH_LOCK, JSON.stringify({ id: TAB_ID, until: now + 8_000 }));
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function unlockRefresh() {
+  try {
+    const raw = localStorage.getItem(REFRESH_LOCK);
+    if (!raw) return;
+    const lock = JSON.parse(raw) as { id?: string };
+    if (lock.id === TAB_ID) localStorage.removeItem(REFRESH_LOCK);
+  } catch {
+    /* another tab can take the lock when it expires */
+  }
+}
+
+async function readUserAccessToken(): Promise<string | null> {
+  const stored = readStoredAccessToken();
+  if (stored) return stored;
+  if (!getAuthClient) return waitForStoredToken(2_000);
+
+  if (!tryLockRefresh()) return waitForStoredToken(4_000);
+  try {
+    const { data } = await getAuthClient().auth.getSession();
+    return usableToken(data.session?.access_token) ?? (await waitForStoredToken(2_000));
+  } catch {
+    return waitForStoredToken(2_000);
+  } finally {
+    unlockRefresh();
+  }
 }
 
 function sessionExpiredResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      message: "Session expired",
-      code: "PGRST303",
-    }),
-    {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    },
-  );
-}
-
-function notifySessionExpired() {
-  if (sessionExpiredNotified) return;
-  sessionExpiredNotified = true;
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED));
-  }
-}
-
-export const SESSION_EXPIRED_EVENT = SESSION_EXPIRED;
-
-/** Join the SDK refresh. Never starts a second refreshSession() rotation. */
-function readUserAccessToken(): Promise<string | null> {
-  if (!getAuthClient) return Promise.resolve(null);
-  if (!sessionRead) {
-    sessionRead = getAuthClient()
-      .auth.getSession()
-      .then(({ data }) => {
-        const token = data.session?.access_token ?? null;
-        if (!token || isAnonJwt(token) || tokenIsExpired(token)) return null;
-        return token;
-      })
-      .catch(() => null)
-      .finally(() => {
-        sessionRead = null;
-      });
-  }
-  return sessionRead;
+  return new Response(JSON.stringify({ message: "Session expired", code: "PGRST303" }), {
+    status: 401,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 async function responseIsJwtError(response: Response): Promise<boolean> {
@@ -158,11 +203,7 @@ export function createAuthAwareFetch(): typeof fetch {
     if (dataCall && userBearerMissing) {
       const fresh = await readUserAccessToken();
       if (fresh) nextInit = withBearer(init, fresh);
-      else {
-        // Never send the anon key: that query succeeds with zero rows.
-        if (current && !isAnonJwt(current)) notifySessionExpired();
-        return sessionExpiredResponse();
-      }
+      else return sessionExpiredResponse();
     }
 
     const response = await rawFetch(input, nextInit);
@@ -170,30 +211,60 @@ export function createAuthAwareFetch(): typeof fetch {
 
     const fresh = await readUserAccessToken();
     const alreadySent = bearerFrom(nextInit);
-    if (!fresh || fresh === alreadySent) {
-      notifySessionExpired();
-      return sessionExpiredResponse();
-    }
-    const retried = await rawFetch(input, withBearer(nextInit, fresh));
-    if (await responseIsJwtError(retried)) {
-      notifySessionExpired();
-      return sessionExpiredResponse();
-    }
-    return retried;
+    if (!fresh || fresh === alreadySent) return response;
+    return rawFetch(input, withBearer(nextInit, fresh));
   };
 }
 
-/** Ask the SDK to recover a session when the employee comes back to a tab. */
+function authClient() {
+  return getAuthClient?.().auth ?? null;
+}
+
+/** Only the visible leader tab runs the refresh timer. */
+function syncRefreshLeader() {
+  const auth = authClient();
+  if (!auth || typeof localStorage === "undefined") return;
+
+  const now = Date.now();
+  let leader: { id?: string; until?: number } | null = null;
+  try {
+    leader = JSON.parse(localStorage.getItem(LEADER_KEY) || "null") as { id?: string; until?: number } | null;
+  } catch {
+    leader = null;
+  }
+
+  const leaderMissing = !leader || leader.id === TAB_ID || typeof leader.until !== "number" || leader.until < now;
+  const shouldLead = document.visibilityState === "visible" && leaderMissing;
+
+  if (shouldLead) {
+    try {
+      localStorage.setItem(LEADER_KEY, JSON.stringify({ id: TAB_ID, until: now + 12_000 }));
+    } catch {
+      /* ignore quota */
+    }
+  }
+
+  if (shouldLead && !leading) {
+    leading = true;
+    void auth.startAutoRefresh();
+  } else if (!shouldLead && leading) {
+    leading = false;
+    void auth.stopAutoRefresh();
+  }
+}
+
 export function installSessionKeepAlive() {
   if (typeof window === "undefined" || !getAuthClient || keepAliveInstalled) return;
   keepAliveInstalled = true;
 
   const wake = () => {
+    syncRefreshLeader();
     if (document.visibilityState === "hidden") return;
-    void readUserAccessToken();
+    if (!readStoredAccessToken()) void readUserAccessToken();
   };
 
   document.addEventListener("visibilitychange", wake);
   window.addEventListener("focus", wake);
-  window.setInterval(wake, 60_000);
+  window.setInterval(syncRefreshLeader, 4_000);
+  syncRefreshLeader();
 }

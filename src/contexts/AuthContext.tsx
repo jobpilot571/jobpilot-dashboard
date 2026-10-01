@@ -9,9 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { toast } from "sonner";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
-import { resetAuthFailureNotice, SESSION_EXPIRED_EVENT } from "@/lib/authFetch";
+import { resetAuthFailureNotice } from "@/lib/authFetch";
 import type { AppRole } from "@/lib/constants";
 
 type AccountStatus = "active" | "pending" | "inactive" | string;
@@ -153,6 +152,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted) return;
+
+      // Several open tabs refresh at once. The tab that loses clears its
+      // in-memory session even when another tab already saved a new one.
+      // Confirm storage is actually empty before sending the employee to login.
+      if (event === "SIGNED_OUT") {
+        const timer = setTimeout(() => {
+          void supabase.auth.getSession().then(({ data }) => {
+            if (!mounted) return;
+            if (data.session) {
+              setSession(data.session);
+              setUser(data.session.user ?? null);
+              return;
+            }
+            setSession(null);
+            setUser(null);
+            setRole(null);
+            setAccountStatus(null);
+            setMustChangePassword(false);
+            setLoading(false);
+          });
+        }, 600);
+        timers.push(timer);
+        return;
+      }
+
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
 
@@ -183,17 +207,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccountStatus(null);
     setMustChangePassword(false);
     setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    const onSessionExpired = () => {
-      toast.error("Your session expired. Sign in again — saved applications are still there.");
-      // Local only. A global sign-out revokes the refresh token and logs out
-      // every other open dashboard tab, which is what made this recur.
-      void supabase.auth.signOut({ scope: "local" });
-    };
-    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
-    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
